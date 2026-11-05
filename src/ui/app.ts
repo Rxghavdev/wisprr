@@ -67,6 +67,8 @@ function trimEth(eth: string) {
 async function paintHome(address: string) {
   $("addr").textContent = address;
   $("bal").textContent = "reading…";
+  $("ens").textContent = "";
+  $("quote-out").textContent = "";
   $("note").textContent = "first call waits while the mixnet comes up.";
   paintSites().catch(() => {});
   show("home");
@@ -77,6 +79,12 @@ async function paintHome(address: string) {
   } catch (err) {
     $("bal").textContent = "—";
     fail(err);
+  }
+  try {
+    const named = await ask({ type: "ens" });
+    $("ens").textContent = named.name || "no ENS name on this address";
+  } catch {
+    $("ens").textContent = "";
   }
 }
 
@@ -204,6 +212,18 @@ $("deny").addEventListener("click", async () => {
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type === "show-prompt") boot().catch(fail);
+});
+
+$("quote").addEventListener("click", async () => {
+  $("quote-out").textContent = "quoting…";
+  try {
+    const res = await ask({ type: "quote" });
+    $("quote-out").textContent = `0.01 ETH → ${res.usdc} USDC`;
+    $("note").textContent = res.note;
+  } catch (err) {
+    $("quote-out").textContent = "";
+    fail(err);
+  }
 });
 
 $("lock").addEventListener("click", async () => {

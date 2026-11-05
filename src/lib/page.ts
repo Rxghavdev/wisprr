@@ -149,10 +149,12 @@ function openPrompt(origin: string, known: boolean, anchor?: number) {
     prompts.set(id, prompt);
     arm(id)
       .then(async () => {
+        const windowId = anchor ?? (await chrome.windows.getCurrent()).id;
+        if (windowId == null) return;
         try {
-          await chrome.action.openPopup(anchor != null ? { windowId: anchor } : {});
+          await chrome.sidePanel.open({ windowId });
         } catch {
-          /* Already open, or Chrome refused. The badge stays, and the icon opens this same prompt. */
+          /* Chrome only opens the panel from a user gesture. The badge stays. Click the icon. */
         }
         chrome.runtime.sendMessage({ type: "show-prompt" }).catch(() => {});
       })
@@ -164,11 +166,13 @@ async function arm(id: string) {
   await chrome.storage.session.set({ [PROMPT]: id });
   await chrome.action.setBadgeBackgroundColor({ color: "#f4f4f4" });
   await chrome.action.setBadgeText({ text: "1" });
+  await chrome.action.setTitle({ title: "A site wants to connect" });
 }
 
 async function disarm() {
   await chrome.storage.session.remove(PROMPT);
   await chrome.action.setBadgeText({ text: "" });
+  await chrome.action.setTitle({ title: "wisprr" });
 }
 
 export async function pendingPrompt() {

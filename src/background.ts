@@ -11,11 +11,15 @@ import {
   publish,
   RpcError,
 } from "./lib/page";
+import { ensName } from "./lib/ens";
+import { quoteEthToUsdc } from "./lib/quote";
 import { anonRequest, mixnetNote } from "./lib/rpc";
 import { hosts } from "./lib/sites";
 import { hasVault, lock, open, seal, sessionMnemonic } from "./lib/vault";
 
 let draft: { password: string; mnemonic: string } | undefined;
+
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
 
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   handle(msg, sender).then(reply, (err) => reply({ error: err instanceof Error ? err.message : "failed" }));
@@ -116,6 +120,19 @@ async function handle(
     const address = mnemonicToAccount(mnemonic).address;
     const hex = (await anonRequest("eth_getBalance", [address, "latest"])) as string;
     return { eth: formatEther(BigInt(hex)), note: mixnetNote() };
+  }
+
+  if (msg.type === "ens") {
+    const mnemonic = await sessionMnemonic();
+    if (!mnemonic) throw new Error("Locked.");
+    const address = mnemonicToAccount(mnemonic).address;
+    return { name: (await ensName(address)) ?? "" };
+  }
+
+  if (msg.type === "quote") {
+    const mnemonic = await sessionMnemonic();
+    if (!mnemonic) throw new Error("Locked.");
+    return { usdc: await quoteEthToUsdc(), note: mixnetNote() };
   }
 
   throw new Error("unknown message");
