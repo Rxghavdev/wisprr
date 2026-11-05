@@ -15,6 +15,20 @@ html, body {
   color: var(--ink);
   background: var(--bg);
   font-family: "Courier New", Courier, monospace;
+  font-weight: 700;
+  cursor: none;
+}
+
+#dot {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  background: #fff;
+  pointer-events: none;
+  z-index: 9;
+  mix-blend-mode: difference;
 }
 
 .stage {
@@ -36,8 +50,8 @@ html, body {
 
 h1 {
   margin: 0;
-  font-weight: 400;
-  font-size: 40px;
+  font-weight: 700;
+  font-size: 44px;
   letter-spacing: -0.04em;
   line-height: 1;
 }
@@ -66,7 +80,7 @@ h2 {
   min-height: 1.4em;
   margin: 0 0 10px;
   font-size: 18px;
-  font-weight: 400;
+  font-weight: 700;
 }
 
 .caret {
@@ -112,6 +126,7 @@ input, textarea {
 }
 
 textarea { resize: vertical; }
+input, textarea { cursor: text; }
 input:focus, textarea:focus { border-color: var(--ink); }
 
 button {
@@ -123,8 +138,9 @@ button {
   background: var(--ink);
   color: #000;
   font: inherit;
+  font-weight: 700;
   letter-spacing: 0.04em;
-  cursor: pointer;
+  cursor: none;
   transition: background 0.15s steps(2), color 0.15s steps(2), transform 0.12s steps(2);
 }
 

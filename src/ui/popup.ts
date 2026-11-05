@@ -28,6 +28,23 @@ chrome.runtime.sendMessage({ type: "status" }).then((res) => {
   }
 });
 
+const dot = document.getElementById("dot") as HTMLElement;
+let aimX = 0;
+let aimY = 0;
+let nowX = 0;
+let nowY = 0;
+addEventListener("mousemove", (event) => {
+  aimX = event.clientX;
+  aimY = event.clientY;
+});
+const chase = () => {
+  nowX += (aimX - nowX) * 0.28;
+  nowY += (aimY - nowY) * 0.28;
+  dot.style.transform = `translate(${nowX - 4}px, ${nowY - 4}px)`;
+  requestAnimationFrame(chase);
+};
+chase();
+
 document.getElementById("open")!.addEventListener("click", () => {
   chrome.tabs.create({ url: chrome.runtime.getURL("app.html") });
 });

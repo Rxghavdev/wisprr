@@ -143,3 +143,20 @@ $("lock").addEventListener("click", async () => {
 
 typeInto($("tag"), TAG);
 boot().catch(fail);
+
+const dot = document.getElementById("dot") as HTMLElement;
+let aimX = 0;
+let aimY = 0;
+let nowX = 0;
+let nowY = 0;
+addEventListener("mousemove", (event) => {
+  aimX = event.clientX;
+  aimY = event.clientY;
+});
+const chase = () => {
+  nowX += (aimX - nowX) * 0.22;
+  nowY += (aimY - nowY) * 0.22;
+  dot.style.transform = `translate(${nowX - 5}px, ${nowY - 5}px)`;
+  requestAnimationFrame(chase);
+};
+chase();
