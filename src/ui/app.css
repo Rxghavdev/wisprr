@@ -56,8 +56,9 @@ h1 {
   padding: 22px 22px 18px;
   backdrop-filter: blur(22px);
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
-  animation: lift 0.45s ease both;
 }
+
+.glass.show { animation: lift 0.45s ease both; }
 
 @keyframes lift {
   from { opacity: 0; transform: translateY(10px); }
@@ -65,11 +66,26 @@ h1 {
 }
 
 h2 {
+  min-height: 1.3em;
   margin: 0 0 8px;
   font-family: "Iowan Old Style", Palatino, Georgia, serif;
   font-size: 26px;
   font-weight: 500;
   letter-spacing: -0.02em;
+}
+
+.caret {
+  display: inline-block;
+  width: 1px;
+  height: 0.85em;
+  margin-left: 2px;
+  background: currentColor;
+  vertical-align: -1px;
+  animation: blink 1s steps(1) infinite;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
 }
 
 .quiet {
@@ -103,6 +119,8 @@ textarea { resize: vertical; }
 input:focus, textarea:focus { border-color: rgba(243, 239, 230, 0.4); }
 
 button {
+  position: relative;
+  overflow: hidden;
   width: 100%;
   margin-top: 6px;
   padding: 12px 14px;
@@ -113,10 +131,25 @@ button {
   font: inherit;
   font-weight: 600;
   cursor: pointer;
+  transition: transform 0.18s ease, filter 0.18s ease;
 }
 
-button:hover { filter: brightness(1.05); }
-button:disabled { opacity: 0.55; cursor: progress; }
+button::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 35%, rgba(255, 255, 255, 0.55) 50%, transparent 65%);
+  transform: translateX(-130%);
+}
+
+button:hover { transform: translateY(-1px); }
+button:hover::after { animation: sheen 0.6s ease; }
+button:active { transform: translateY(1px) scale(0.985); }
+button:disabled { opacity: 0.55; cursor: progress; transform: none; }
+
+@keyframes sheen {
+  to { transform: translateX(130%); }
+}
 
 button.text {
   background: transparent;
@@ -139,6 +172,7 @@ button.text {
   background: rgba(0, 0, 0, 0.22);
   font-family: "Iowan Old Style", Palatino, Georgia, serif;
   font-size: 16px;
+  animation: lift 0.35s ease both;
 }
 
 .words span {

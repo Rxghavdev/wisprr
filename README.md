@@ -1,6 +1,6 @@
 # wisprr
 
-Sepolia wallet, as a Chrome extension. Keys stay in the browser.
+Ethereum mainnet wallet, as a Chrome extension. Keys stay in the browser.
 
 ```
 npm install

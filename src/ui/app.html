@@ -9,11 +9,11 @@
   <body>
     <main class="stage">
       <div class="card">
-        <p class="where">Sepolia</p>
+        <p class="where">Ethereum</p>
         <h1>wisprr</h1>
 
         <section class="glass" data-screen="create">
-          <h2>A password for this browser.</h2>
+          <h2 data-type="A password for this browser."></h2>
           <p class="quiet">The recovery phrase shows up next. Write it down before you continue.</p>
           <label>Password <input id="pw" type="password" autocomplete="new-password" /></label>
           <label>Again <input id="pw2" type="password" autocomplete="new-password" /></label>
@@ -22,19 +22,19 @@
         </section>
 
         <section class="glass" data-screen="words" hidden>
-          <h2>Twelve words. Nowhere else.</h2>
+          <h2 data-type="Twelve words. Nowhere else."></h2>
           <ol class="words" id="words"></ol>
           <button id="keep" type="button">I've written them down</button>
         </section>
 
         <section class="glass" data-screen="unlock" hidden>
-          <h2>Locked.</h2>
+          <h2 data-type="Locked."></h2>
           <label>Password <input id="unlock-pw" type="password" autocomplete="current-password" /></label>
           <button id="unlock" type="button">Unlock</button>
         </section>
 
         <section class="glass" data-screen="import" hidden>
-          <h2>Bring a phrase in.</h2>
+          <h2 data-type="Bring a phrase in."></h2>
           <label>Phrase <textarea id="phrase" rows="3" spellcheck="false"></textarea></label>
           <label>New password <input id="import-pw" type="password" autocomplete="new-password" /></label>
           <button id="import" type="button">Import</button>
@@ -42,7 +42,7 @@
         </section>
 
         <section class="glass" data-screen="home" hidden>
-          <p class="quiet">This address. Nothing sent yet.</p>
+          <h2 data-type="Your mainnet address."></h2>
           <p class="addr" id="addr"></p>
           <button id="lock" class="text" type="button">Lock</button>
         </section>

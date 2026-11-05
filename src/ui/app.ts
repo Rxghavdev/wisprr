@@ -1,8 +1,34 @@
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 
+let typing = 0;
+
+function typeInto(el: HTMLElement, text: string) {
+  const run = ++typing;
+  el.replaceChildren();
+  const caret = document.createElement("i");
+  caret.className = "caret";
+  el.append(caret);
+  let i = 0;
+  const step = () => {
+    if (run !== typing) return;
+    if (i >= text.length) return;
+    caret.before(text[i]);
+    i += 1;
+    window.setTimeout(step, text[i - 1] === "." ? 180 : 38);
+  };
+  window.setTimeout(step, 80);
+}
+
 function show(name: string) {
   for (const el of document.querySelectorAll<HTMLElement>("[data-screen]")) {
-    el.hidden = el.dataset.screen !== name;
+    const on = el.dataset.screen === name;
+    el.hidden = !on;
+    if (!on) continue;
+    el.classList.remove("show");
+    void el.offsetWidth;
+    el.classList.add("show");
+    const head = el.querySelector<HTMLElement>("[data-type]");
+    if (head?.dataset.type) typeInto(head, head.dataset.type);
   }
   $("err").hidden = true;
 }
@@ -27,6 +53,7 @@ function paintWords(mnemonic: string) {
     const n = document.createElement("span");
     n.textContent = String(i + 1);
     li.append(n, document.createTextNode(word));
+    li.style.animationDelay = `${i * 40}ms`;
     list.append(li);
   });
 }
