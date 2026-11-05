@@ -4,14 +4,20 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>wisprr</title>
+    <link rel="icon" href="icon.png" />
     <link rel="stylesheet" href="app.css" />
   </head>
   <body>
     <div id="dot" aria-hidden="true"></div>
     <main class="stage">
       <div class="card">
-        <p class="where">Ethereum</p>
-        <h1>wisprr</h1>
+        <div class="brand">
+          <img class="mark" src="mark.svg" alt="" />
+          <div>
+            <p class="where">Ethereum</p>
+            <h1>wisprr</h1>
+          </div>
+        </div>
         <p class="tag" id="tag"></p>
 
         <section class="panel" data-screen="create">
@@ -48,6 +54,7 @@
           <p class="addr" id="addr"></p>
           <p class="bal" id="bal"></p>
           <p class="quiet" id="note"></p>
+          <ul class="sites" id="sites" hidden></ul>
           <button id="lock" class="text" type="button">Lock</button>
         </section>
 

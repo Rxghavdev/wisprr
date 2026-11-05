@@ -5,14 +5,26 @@
 }
 
 body {
-  width: 280px;
+  width: 360px;
   margin: 0;
-  padding: 14px;
+  padding: 18px 18px 16px;
   color: var(--ink);
   background: #000;
   font-family: "Courier New", Courier, monospace;
   font-weight: 700;
   cursor: none;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mark {
+  width: 44px;
+  height: 44px;
+  flex: none;
 }
 
 #dot {
@@ -34,9 +46,11 @@ body {
 }
 
 h1 {
-  margin: 6px 0 4px;
-  font-size: 28px;
+  margin: 2px 0 0;
+  font-size: 34px;
   font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1;
 }
 
 .tag, .line {
@@ -63,7 +77,7 @@ button {
   width: 100%;
   padding: 9px 10px;
   border: 1px solid var(--ink);
-  border-radius: 0;
+  border-radius: 12px;
   background: var(--ink);
   color: #000;
   font: inherit;

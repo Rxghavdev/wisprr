@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>wisprr</title>
+    <link rel="icon" href="icon.png" />
+    <link rel="stylesheet" href="app.css" />
+  </head>
+  <body>
+    <div id="dot" aria-hidden="true"></div>
+    <main class="stage">
+      <div class="card">
+        <div class="brand">
+          <img class="mark" src="mark.svg" alt="" />
+          <div>
+            <p class="where">Ethereum</p>
+            <h1>wisprr</h1>
+          </div>
+        </div>
+        <p class="tag" id="tag"></p>
+        <p class="host" id="host"></p>
+
+        <section class="panel" data-screen="ask" hidden>
+          <h2 data-type="Connect this site?"></h2>
+          <p class="quiet">A normal wallet would answer from your IP. This one asks through the mixnet.</p>
+          <p class="quiet">The site still knows you opened the page.</p>
+          <button id="allow" type="button">Connect</button>
+          <button id="deny" class="text" type="button">Cancel</button>
+        </section>
+
+        <section class="panel" data-screen="locked" hidden>
+          <h2 data-type="Locked."></h2>
+          <label>Password <input id="pw" type="password" autocomplete="current-password" /></label>
+          <button id="unlock" type="button">Unlock</button>
+          <button id="deny-locked" class="text" type="button">Cancel</button>
+        </section>
+
+        <section class="panel" data-screen="empty" hidden>
+          <h2 data-type="No wallet yet."></h2>
+          <p class="quiet">Make one in wisprr, then come back to this window.</p>
+          <button id="make" type="button">Open wisprr</button>
+          <button id="again" class="text" type="button">Check again</button>
+        </section>
+
+        <p class="err" id="err" hidden></p>
+      </div>
+    </main>
+    <script type="module" src="connect.js"></script>
+  </body>
+</html>

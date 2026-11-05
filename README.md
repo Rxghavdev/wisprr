@@ -1,6 +1,6 @@
 # wisprr
 
-Ethereum mainnet wallet. The balance is read through Anon-RPC. Keys stay in the browser.
+Ethereum mainnet wallet. Reads go out through Anon-RPC. A site can connect the way it connects any wallet. Signing is not in this build yet. Keys stay in the browser.
 
 ```
 npm install

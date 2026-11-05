@@ -1,16 +1,32 @@
 import { formatEther } from "viem";
 import { english, generateMnemonic, mnemonicToAccount } from "viem/accounts";
+import {
+  allowPrompt,
+  closed,
+  denyPrompt,
+  describe,
+  pageOrigin,
+  pageRequest,
+  publish,
+  RpcError,
+} from "./lib/page";
 import { anonRequest, mixnetNote } from "./lib/rpc";
+import { hosts } from "./lib/sites";
 import { hasVault, lock, open, seal, sessionMnemonic } from "./lib/vault";
 
 let draft: { password: string; mnemonic: string } | undefined;
 
-chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
-  handle(msg).then(reply, (err) => reply({ error: err instanceof Error ? err.message : "failed" }));
+chrome.runtime.onMessage.addListener((msg, sender, reply) => {
+  handle(msg, sender).then(reply, (err) => reply({ error: err instanceof Error ? err.message : "failed" }));
   return true;
 });
 
-async function handle(msg: { type?: string; password?: string; mnemonic?: string }) {
+chrome.windows.onRemoved.addListener((windowId) => closed(windowId));
+
+async function handle(
+  msg: { type?: string; password?: string; mnemonic?: string; method?: string; params?: unknown[]; id?: string },
+  sender: chrome.runtime.MessageSender,
+) {
   if (msg.type === "status") {
     const mnemonic = await sessionMnemonic();
     const account = mnemonic ? mnemonicToAccount(mnemonic) : undefined;
@@ -55,7 +71,32 @@ async function handle(msg: { type?: string; password?: string; mnemonic?: string
 
   if (msg.type === "lock") {
     await lock();
+    publish([]);
     return { ok: true };
+  }
+
+  if (msg.type === "sites") return { hosts: await hosts() };
+
+  if (msg.type === "prompt") return describe(msg.id ?? "");
+  if (msg.type === "allow") {
+    await allowPrompt(msg.id ?? "");
+    return { ok: true };
+  }
+  if (msg.type === "deny") {
+    denyPrompt(msg.id ?? "");
+    return { ok: true };
+  }
+
+  if (msg.type === "rpc") {
+    const origin = pageOrigin(sender);
+    if (!origin) return { error: { code: 4100, message: "This page can't use wisprr." } };
+    try {
+      return { result: await pageRequest(msg.method ?? "", msg.params, origin) };
+    } catch (err) {
+      const code = err instanceof RpcError ? err.code : -32603;
+      const message = err instanceof Error ? err.message : "failed";
+      return { error: { code, message } };
+    }
   }
 
   if (msg.type === "balance") {

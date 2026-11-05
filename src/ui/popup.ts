@@ -46,5 +46,16 @@ const chase = () => {
 chase();
 
 document.getElementById("open")!.addEventListener("click", () => {
-  chrome.tabs.create({ url: chrome.runtime.getURL("app.html") });
+  const url = chrome.runtime.getURL("app.html");
+  chrome.tabs.query({ url }, (tabs) => {
+    const tab = tabs[0];
+    if (tab?.windowId != null) {
+      chrome.windows.update(tab.windowId, { focused: true, width: 560, height: 820 });
+      if (tab.id != null) chrome.tabs.update(tab.id, { active: true });
+      return;
+    }
+    chrome.windows.create({ url, type: "popup", width: 560, height: 820, focused: true });
+  });
 });
+
+export {};

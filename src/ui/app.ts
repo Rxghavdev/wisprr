@@ -68,6 +68,7 @@ async function paintHome(address: string) {
   $("addr").textContent = address;
   $("bal").textContent = "reading…";
   $("note").textContent = "first call waits while the mixnet comes up.";
+  paintSites().catch(() => {});
   show("home");
   try {
     const res = await ask({ type: "balance" });
@@ -76,6 +77,23 @@ async function paintHome(address: string) {
   } catch (err) {
     $("bal").textContent = "—";
     fail(err);
+  }
+}
+
+async function paintSites() {
+  const res = await ask({ type: "sites" });
+  const list = $("sites");
+  const names = (res.hosts as string[]) ?? [];
+  list.replaceChildren();
+  if (!names.length) {
+    list.hidden = true;
+    return;
+  }
+  list.hidden = false;
+  for (const name of names) {
+    const li = document.createElement("li");
+    li.textContent = name;
+    list.append(li);
   }
 }
 
@@ -160,3 +178,5 @@ const chase = () => {
   requestAnimationFrame(chase);
 };
 chase();
+
+export {};

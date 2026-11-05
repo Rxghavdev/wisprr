@@ -38,7 +38,20 @@ html, body {
   padding: 28px 18px 48px;
 }
 
-.card { width: min(440px, 100%); }
+.card { width: min(480px, 100%); }
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 4px;
+}
+
+.mark {
+  width: 54px;
+  height: 54px;
+  flex: none;
+}
 
 .where {
   margin: 0 0 8px;
@@ -51,9 +64,9 @@ html, body {
 h1 {
   margin: 0;
   font-weight: 700;
-  font-size: 44px;
+  font-size: 48px;
   letter-spacing: -0.04em;
-  line-height: 1;
+  line-height: 0.95;
 }
 
 .tag {
@@ -65,8 +78,9 @@ h1 {
 
 .panel {
   border: 1px solid var(--line);
-  padding: 18px 16px 14px;
-  background: #000;
+  border-radius: 18px;
+  padding: 20px 18px 16px;
+  background: #050505;
 }
 
 .panel.show { animation: in 0.35s steps(6) both; }
@@ -120,7 +134,7 @@ input, textarea {
   color: var(--ink);
   background: #000;
   border: 1px solid var(--line);
-  border-radius: 0;
+  border-radius: 12px;
   font: inherit;
   outline: none;
 }
@@ -134,7 +148,7 @@ button {
   margin-top: 8px;
   padding: 11px 12px;
   border: 1px solid var(--ink);
-  border-radius: 0;
+  border-radius: 12px;
   background: var(--ink);
   color: #000;
   font: inherit;
@@ -168,6 +182,7 @@ button.text:hover { color: var(--ink); background: transparent; }
 .words li {
   padding: 8px;
   border: 1px solid var(--line);
+  border-radius: 10px;
   animation: in 0.3s steps(4) both;
 }
 
@@ -189,5 +204,25 @@ button.text:hover { color: var(--ink); background: transparent; }
 .err {
   margin: 12px 0 0;
   color: var(--ink);
+  font-size: 13px;
+}
+
+.host {
+  margin: -8px 0 16px;
+  font-size: 16px;
+}
+
+.sites {
+  list-style: none;
+  margin: 4px 0 12px;
+  padding: 0;
+}
+
+.sites li {
+  margin: 0 0 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--dim);
   font-size: 13px;
 }
