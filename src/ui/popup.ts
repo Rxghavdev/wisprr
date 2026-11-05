@@ -1,5 +1,3 @@
-import { showPanel } from "../lib/panel";
-
 const line = document.getElementById("line")!;
 const tag = document.getElementById("tag")!;
 
@@ -48,7 +46,7 @@ const chase = () => {
 chase();
 
 document.getElementById("open")!.addEventListener("click", () => {
-  showPanel(chrome.runtime.getURL("app.html"));
+  window.close();
 });
 
 export {};

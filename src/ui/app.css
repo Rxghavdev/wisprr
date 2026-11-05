@@ -10,12 +10,11 @@
 * { box-sizing: border-box; }
 
 html, body {
+  width: 380px;
   margin: 0;
-  min-height: 100%;
   color: var(--ink);
   background: var(--bg);
   border-radius: 18px;
-  overflow: hidden;
   font-family: "Courier New", Courier, monospace;
   font-weight: 700;
   cursor: none;
@@ -36,10 +35,7 @@ body { border: 1px solid var(--line); }
 }
 
 .stage {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: 28px 18px 48px;
+  padding: 16px 14px 18px;
 }
 
 .card { width: min(480px, 100%); }

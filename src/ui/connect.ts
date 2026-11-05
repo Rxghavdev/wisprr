@@ -1,5 +1,3 @@
-import { showPanel } from "../lib/panel";
-
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 const id = new URLSearchParams(location.search).get("id") ?? "";
 
@@ -89,7 +87,7 @@ $("unlock").addEventListener("click", async () => {
 });
 
 $("make").addEventListener("click", () => {
-  showPanel(chrome.runtime.getURL("app.html"));
+  chrome.action.openPopup();
 });
 
 $("again").addEventListener("click", () => load().catch(fail));

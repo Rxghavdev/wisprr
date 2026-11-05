@@ -19,6 +19,15 @@
           </div>
         </div>
         <p class="tag" id="tag"></p>
+        <p class="host" id="host" hidden></p>
+
+        <section class="panel" data-screen="ask" hidden>
+          <h2 data-type="Connect this site?"></h2>
+          <p class="quiet">A normal wallet would answer from your IP. This one asks through the mixnet.</p>
+          <p class="quiet">The site still knows you opened the page.</p>
+          <button id="allow" type="button">Connect</button>
+          <button id="deny" class="text" type="button">Cancel</button>
+        </section>
 
         <section class="panel" data-screen="create">
           <h2 data-type="A password for this browser."></h2>

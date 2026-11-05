@@ -1,5 +1,4 @@
 import { mnemonicToAccount } from "viem/accounts";
-import { showPanel } from "./panel";
 import { anonRequest } from "./rpc";
 import { allow, allowed } from "./sites";
 import { hasVault, sessionMnemonic } from "./vault";
@@ -32,13 +31,14 @@ const READ = new Set([
   "eth_syncing",
 ]);
 
+const PROMPT = "wisprr-prompt";
+
 type Prompt = {
   origin: string;
   host: string;
   known: boolean;
   resolve: (address: string) => void;
   reject: (err: Error) => void;
-  windowId?: number;
 };
 
 const prompts = new Map<string, Prompt>();
@@ -147,11 +147,46 @@ function openPrompt(origin: string, known: boolean, anchor?: number) {
   return new Promise<string>((resolve, reject) => {
     const prompt: Prompt = { origin, host: hostOf(origin), known, resolve, reject };
     prompts.set(id, prompt);
-    const url = chrome.runtime.getURL(`connect.html?id=${encodeURIComponent(id)}`);
-    showPanel(url, anchor).then((windowId) => {
-      prompt.windowId = windowId;
-    });
+    arm(id)
+      .then(async () => {
+        try {
+          await chrome.action.openPopup(anchor != null ? { windowId: anchor } : {});
+        } catch {
+          /* Already open, or Chrome refused. The badge stays, and the icon opens this same prompt. */
+        }
+        chrome.runtime.sendMessage({ type: "show-prompt" }).catch(() => {});
+      })
+      .catch(() => {});
   });
+}
+
+async function arm(id: string) {
+  await chrome.storage.session.set({ [PROMPT]: id });
+  await chrome.action.setBadgeBackgroundColor({ color: "#f4f4f4" });
+  await chrome.action.setBadgeText({ text: "1" });
+}
+
+async function disarm() {
+  await chrome.storage.session.remove(PROMPT);
+  await chrome.action.setBadgeText({ text: "" });
+}
+
+export async function pendingPrompt() {
+  const bag = await chrome.storage.session.get(PROMPT);
+  const id = bag[PROMPT] as string | undefined;
+  if (!id || !prompts.has(id)) {
+    if (id) await disarm();
+    return { id: "" };
+  }
+  return { id, ...(await describe(id)) };
+}
+
+export function popupGone(id: string) {
+  const prompt = prompts.get(id);
+  if (!prompt) return;
+  prompts.delete(id);
+  prompt.reject(new RpcError(4001, "User rejected the request."));
+  void disarm();
 }
 
 export async function describe(id: string) {
@@ -173,7 +208,7 @@ export async function allowPrompt(id: string) {
   await allow(prompt.origin);
   prompts.delete(id);
   prompt.resolve(address);
-  if (prompt.windowId) chrome.windows.remove(prompt.windowId);
+  await disarm();
 }
 
 export function denyPrompt(id: string) {
@@ -181,13 +216,5 @@ export function denyPrompt(id: string) {
   if (!prompt) return;
   prompts.delete(id);
   prompt.reject(new RpcError(4001, "User rejected the request."));
-  if (prompt.windowId) chrome.windows.remove(prompt.windowId);
-}
-
-export function closed(windowId: number) {
-  for (const [id, prompt] of prompts) {
-    if (prompt.windowId !== windowId) continue;
-    prompts.delete(id);
-    prompt.reject(new RpcError(4001, "User rejected the request."));
-  }
+  void disarm();
 }

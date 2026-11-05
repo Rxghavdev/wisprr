@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "An Ethereum wallet.",
   "action": {
-    "default_popup": "popup.html",
+    "default_popup": "app.html",
     "default_title": "wisprr",
     "default_icon": "icon.png"
   },

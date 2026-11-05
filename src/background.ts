@@ -2,11 +2,12 @@ import { formatEther } from "viem";
 import { english, generateMnemonic, mnemonicToAccount } from "viem/accounts";
 import {
   allowPrompt,
-  closed,
   denyPrompt,
   describe,
   pageOrigin,
   pageRequest,
+  pendingPrompt,
+  popupGone,
   publish,
   RpcError,
 } from "./lib/page";
@@ -21,7 +22,16 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   return true;
 });
 
-chrome.windows.onRemoved.addListener((windowId) => closed(windowId));
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== "wisprr") return;
+  let watching = "";
+  port.onMessage.addListener((msg) => {
+    if (msg?.type === "watch" && typeof msg.id === "string") watching = msg.id;
+  });
+  port.onDisconnect.addListener(() => {
+    if (watching) popupGone(watching);
+  });
+});
 
 async function handle(
   msg: { type?: string; password?: string; mnemonic?: string; method?: string; params?: unknown[]; id?: string },
@@ -77,6 +87,7 @@ async function handle(
 
   if (msg.type === "sites") return { hosts: await hosts() };
 
+  if (msg.type === "pending") return pendingPrompt();
   if (msg.type === "prompt") return describe(msg.id ?? "");
   if (msg.type === "allow") {
     await allowPrompt(msg.id ?? "");

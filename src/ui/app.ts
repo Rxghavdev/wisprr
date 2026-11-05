@@ -97,7 +97,38 @@ async function paintSites() {
   }
 }
 
+const port = chrome.runtime.connect({ name: "wisprr" });
+let promptId = "";
+
+async function showPrompt(info: { id: string; host: string; hasVault: boolean; unlocked: boolean; known: boolean }) {
+  promptId = info.id;
+  const host = $("host");
+  host.hidden = false;
+  host.textContent = info.host;
+  port.postMessage({ type: "watch", id: info.id });
+  if (!info.hasVault) return show("create");
+  if (!info.unlocked) return show("unlock");
+  show("ask");
+}
+
+async function afterAccount(address: string) {
+  const pending = await ask({ type: "pending" });
+  if (pending.id) {
+    if (pending.known && pending.unlocked) {
+      await ask({ type: "allow", id: pending.id });
+      window.close();
+      return;
+    }
+    return showPrompt(pending);
+  }
+  $("host").hidden = true;
+  await paintHome(address);
+}
+
 async function boot() {
+  const pending = await ask({ type: "pending" });
+  if (pending.id) return showPrompt(pending);
+  $("host").hidden = true;
   const status = await ask({ type: "status" });
   if (status.unlocked) {
     await paintHome(status.address);
@@ -122,7 +153,7 @@ $("create").addEventListener("click", async () => {
 $("keep").addEventListener("click", async () => {
   try {
     const res = await ask({ type: "keep" });
-    await paintHome(res.address);
+    await afterAccount(res.address);
   } catch (err) {
     fail(err);
   }
@@ -138,7 +169,7 @@ $("import").addEventListener("click", async () => {
       password: ($("import-pw") as HTMLInputElement).value,
       mnemonic: ($("phrase") as HTMLTextAreaElement).value,
     });
-    await paintHome(res.address);
+    await afterAccount(res.address);
   } catch (err) {
     fail(err);
   }
@@ -147,10 +178,32 @@ $("import").addEventListener("click", async () => {
 $("unlock").addEventListener("click", async () => {
   try {
     const res = await ask({ type: "unlock", password: ($("unlock-pw") as HTMLInputElement).value });
-    await paintHome(res.address);
+    await afterAccount(res.address);
   } catch (err) {
     fail(err);
   }
+});
+
+$("allow").addEventListener("click", async () => {
+  try {
+    await ask({ type: "allow", id: promptId });
+    window.close();
+  } catch (err) {
+    fail(err);
+  }
+});
+
+$("deny").addEventListener("click", async () => {
+  try {
+    await ask({ type: "deny", id: promptId });
+  } catch {
+    /* the popup is closing */
+  }
+  window.close();
+});
+
+chrome.runtime.onMessage.addListener((msg) => {
+  if (msg?.type === "show-prompt") boot().catch(fail);
 });
 
 $("lock").addEventListener("click", async () => {
