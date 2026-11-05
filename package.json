@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@anon-rpc/browser-extension-harness": "0.4.0",
     "viem": "2.38.6"
   },
   "devDependencies": {

@@ -11,8 +11,9 @@
       <div class="card">
         <p class="where">Ethereum</p>
         <h1>wisprr</h1>
+        <p class="tag" id="tag"></p>
 
-        <section class="glass" data-screen="create">
+        <section class="panel" data-screen="create">
           <h2 data-type="A password for this browser."></h2>
           <p class="quiet">The recovery phrase shows up next. Write it down before you continue.</p>
           <label>Password <input id="pw" type="password" autocomplete="new-password" /></label>
@@ -21,19 +22,19 @@
           <button id="show-import" class="text" type="button">I already have a phrase</button>
         </section>
 
-        <section class="glass" data-screen="words" hidden>
+        <section class="panel" data-screen="words" hidden>
           <h2 data-type="Twelve words. Nowhere else."></h2>
           <ol class="words" id="words"></ol>
           <button id="keep" type="button">I've written them down</button>
         </section>
 
-        <section class="glass" data-screen="unlock" hidden>
+        <section class="panel" data-screen="unlock" hidden>
           <h2 data-type="Locked."></h2>
           <label>Password <input id="unlock-pw" type="password" autocomplete="current-password" /></label>
           <button id="unlock" type="button">Unlock</button>
         </section>
 
-        <section class="glass" data-screen="import" hidden>
+        <section class="panel" data-screen="import" hidden>
           <h2 data-type="Bring a phrase in."></h2>
           <label>Phrase <textarea id="phrase" rows="3" spellcheck="false"></textarea></label>
           <label>New password <input id="import-pw" type="password" autocomplete="new-password" /></label>
@@ -41,9 +42,11 @@
           <button id="back" class="text" type="button">Back</button>
         </section>
 
-        <section class="glass" data-screen="home" hidden>
-          <h2 data-type="Your mainnet address."></h2>
+        <section class="panel" data-screen="home" hidden>
+          <h2 data-type="Mainnet."></h2>
           <p class="addr" id="addr"></p>
+          <p class="bal" id="bal"></p>
+          <p class="quiet" id="note"></p>
           <button id="lock" class="text" type="button">Lock</button>
         </section>
 

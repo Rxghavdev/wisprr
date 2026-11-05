@@ -1,7 +1,10 @@
 import { build } from "esbuild";
+import { createRequire } from "node:module";
 import { cp, mkdir, rm } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+const require = createRequire(import.meta.url);
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)));
 const out = resolve(root, "dist/unpacked");
@@ -26,5 +29,11 @@ await cp(resolve(root, "src/ui/app.css"), resolve(out, "app.css"));
 await cp(resolve(root, "src/ui/popup.html"), resolve(out, "popup.html"));
 await cp(resolve(root, "src/ui/popup.css"), resolve(out, "popup.css"));
 await cp(resolve(root, "src/ui/icon.png"), resolve(out, "icon.png"));
+
+const harness = resolve(
+  dirname(require.resolve("@anon-rpc/browser-extension-harness/package.json")),
+  "dist/static/anon-rpc",
+);
+await cp(harness, resolve(out, "anon-rpc"), { recursive: true });
 
 console.log("dist/unpacked");

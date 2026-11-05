@@ -1,4 +1,6 @@
+import { formatEther } from "viem";
 import { english, generateMnemonic, mnemonicToAccount } from "viem/accounts";
+import { anonRequest, mixnetNote } from "./lib/rpc";
 import { hasVault, lock, open, seal, sessionMnemonic } from "./lib/vault";
 
 let draft: { password: string; mnemonic: string } | undefined;
@@ -54,6 +56,14 @@ async function handle(msg: { type?: string; password?: string; mnemonic?: string
   if (msg.type === "lock") {
     await lock();
     return { ok: true };
+  }
+
+  if (msg.type === "balance") {
+    const mnemonic = await sessionMnemonic();
+    if (!mnemonic) throw new Error("Locked.");
+    const address = mnemonicToAccount(mnemonic).address;
+    const hex = (await anonRequest("eth_getBalance", [address, "latest"])) as string;
+    return { eth: formatEther(BigInt(hex)), note: mixnetNote() };
   }
 
   throw new Error("unknown message");

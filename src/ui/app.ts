@@ -1,33 +1,34 @@
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 
-let typing = 0;
+const TAG = "the node sees the question, not you.";
 
 function typeInto(el: HTMLElement, text: string) {
-  const run = ++typing;
+  const token = {};
+  (el as HTMLElement & { _type?: object })._type = token;
   el.replaceChildren();
   const caret = document.createElement("i");
   caret.className = "caret";
   el.append(caret);
   let i = 0;
   const step = () => {
-    if (run !== typing) return;
+    if ((el as HTMLElement & { _type?: object })._type !== token) return;
     if (i >= text.length) return;
     caret.before(text[i]);
     i += 1;
-    window.setTimeout(step, text[i - 1] === "." ? 180 : 38);
+    window.setTimeout(step, text[i - 1] === "," || text[i - 1] === "." ? 160 : 34);
   };
-  window.setTimeout(step, 80);
+  window.setTimeout(step, 60);
 }
 
 function show(name: string) {
-  for (const el of document.querySelectorAll<HTMLElement>("[data-screen]")) {
+  for (const el of Array.from(document.querySelectorAll<HTMLElement>("[data-screen]"))) {
     const on = el.dataset.screen === name;
     el.hidden = !on;
     if (!on) continue;
     el.classList.remove("show");
     void el.offsetWidth;
     el.classList.add("show");
-    const head = el.querySelector<HTMLElement>("[data-type]");
+    const head = el.querySelector("[data-type]") as HTMLElement | null;
     if (head?.dataset.type) typeInto(head, head.dataset.type);
   }
   $("err").hidden = true;
@@ -58,11 +59,30 @@ function paintWords(mnemonic: string) {
   });
 }
 
+function trimEth(eth: string) {
+  const [whole, frac = ""] = eth.split(".");
+  return frac ? `${whole}.${frac.slice(0, 5)}` : whole;
+}
+
+async function paintHome(address: string) {
+  $("addr").textContent = address;
+  $("bal").textContent = "reading…";
+  $("note").textContent = "first call waits while the mixnet comes up.";
+  show("home");
+  try {
+    const res = await ask({ type: "balance" });
+    $("bal").textContent = `${trimEth(res.eth)} ETH`;
+    $("note").textContent = res.note;
+  } catch (err) {
+    $("bal").textContent = "—";
+    fail(err);
+  }
+}
+
 async function boot() {
   const status = await ask({ type: "status" });
   if (status.unlocked) {
-    $("addr").textContent = status.address;
-    show("home");
+    await paintHome(status.address);
     return;
   }
   show(status.hasVault ? "unlock" : "create");
@@ -84,8 +104,7 @@ $("create").addEventListener("click", async () => {
 $("keep").addEventListener("click", async () => {
   try {
     const res = await ask({ type: "keep" });
-    $("addr").textContent = res.address;
-    show("home");
+    await paintHome(res.address);
   } catch (err) {
     fail(err);
   }
@@ -101,8 +120,7 @@ $("import").addEventListener("click", async () => {
       password: ($("import-pw") as HTMLInputElement).value,
       mnemonic: ($("phrase") as HTMLTextAreaElement).value,
     });
-    $("addr").textContent = res.address;
-    show("home");
+    await paintHome(res.address);
   } catch (err) {
     fail(err);
   }
@@ -111,8 +129,7 @@ $("import").addEventListener("click", async () => {
 $("unlock").addEventListener("click", async () => {
   try {
     const res = await ask({ type: "unlock", password: ($("unlock-pw") as HTMLInputElement).value });
-    $("addr").textContent = res.address;
-    show("home");
+    await paintHome(res.address);
   } catch (err) {
     fail(err);
   }
@@ -124,4 +141,5 @@ $("lock").addEventListener("click", async () => {
   show("unlock");
 });
 
+typeInto($("tag"), TAG);
 boot().catch(fail);

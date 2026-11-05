@@ -1,6 +1,6 @@
 # wisprr
 
-Ethereum mainnet wallet, as a Chrome extension. Keys stay in the browser.
+Ethereum mainnet wallet. The balance is read through Anon-RPC. Keys stay in the browser.
 
 ```
 npm install
