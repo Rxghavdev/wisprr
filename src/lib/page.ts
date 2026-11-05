@@ -145,8 +145,8 @@ function openPrompt(origin: string, known: boolean) {
       {
         url: chrome.runtime.getURL(`connect.html?id=${encodeURIComponent(id)}`),
         type: "popup",
-        width: 440,
-        height: 680,
+        width: 400,
+        height: 620,
         focused: true,
       },
       (win) => {

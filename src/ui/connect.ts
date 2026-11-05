@@ -90,8 +90,8 @@ $("make").addEventListener("click", () => {
   chrome.windows.create({
     url: chrome.runtime.getURL("app.html"),
     type: "popup",
-    width: 560,
-    height: 820,
+    width: 400,
+    height: 620,
     focused: true,
   });
 });

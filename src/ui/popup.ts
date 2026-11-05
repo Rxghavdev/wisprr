@@ -47,14 +47,13 @@ chase();
 
 document.getElementById("open")!.addEventListener("click", () => {
   const url = chrome.runtime.getURL("app.html");
-  chrome.tabs.query({ url }, (tabs) => {
-    const tab = tabs[0];
-    if (tab?.windowId != null) {
-      chrome.windows.update(tab.windowId, { focused: true, width: 560, height: 820 });
-      if (tab.id != null) chrome.tabs.update(tab.id, { active: true });
+  chrome.windows.getAll({ populate: true, windowTypes: ["popup"] }, (wins) => {
+    const existing = wins.find((win) => win.tabs?.some((tab) => tab.url === url));
+    if (existing?.id != null) {
+      chrome.windows.update(existing.id, { focused: true, state: "normal", width: 400, height: 620 });
       return;
     }
-    chrome.windows.create({ url, type: "popup", width: 560, height: 820, focused: true });
+    chrome.windows.create({ url, type: "popup", width: 400, height: 620, focused: true });
   });
 });
 

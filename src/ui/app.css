@@ -14,10 +14,14 @@ html, body {
   min-height: 100%;
   color: var(--ink);
   background: var(--bg);
+  border-radius: 18px;
+  overflow: hidden;
   font-family: "Courier New", Courier, monospace;
   font-weight: 700;
   cursor: none;
 }
+
+body { border: 1px solid var(--line); }
 
 #dot {
   position: fixed;
@@ -78,7 +82,7 @@ h1 {
 
 .panel {
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 0;
   padding: 20px 18px 16px;
   background: #050505;
 }
@@ -134,7 +138,7 @@ input, textarea {
   color: var(--ink);
   background: #000;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 0;
   font: inherit;
   outline: none;
 }
@@ -148,7 +152,7 @@ button {
   margin-top: 8px;
   padding: 11px 12px;
   border: 1px solid var(--ink);
-  border-radius: 12px;
+  border-radius: 0;
   background: var(--ink);
   color: #000;
   font: inherit;
@@ -182,7 +186,7 @@ button.text:hover { color: var(--ink); background: transparent; }
 .words li {
   padding: 8px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 0;
   animation: in 0.3s steps(4) both;
 }
 
@@ -222,7 +226,7 @@ button.text:hover { color: var(--ink); background: transparent; }
   margin: 0 0 6px;
   padding: 8px 10px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 0;
   color: var(--dim);
   font-size: 13px;
 }
