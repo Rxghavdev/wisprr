@@ -1,3 +1,5 @@
+import { showPanel } from "../lib/panel";
+
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 const id = new URLSearchParams(location.search).get("id") ?? "";
 
@@ -87,13 +89,7 @@ $("unlock").addEventListener("click", async () => {
 });
 
 $("make").addEventListener("click", () => {
-  chrome.windows.create({
-    url: chrome.runtime.getURL("app.html"),
-    type: "popup",
-    width: 400,
-    height: 620,
-    focused: true,
-  });
+  showPanel(chrome.runtime.getURL("app.html"));
 });
 
 $("again").addEventListener("click", () => load().catch(fail));

@@ -1,3 +1,5 @@
+import { showPanel } from "../lib/panel";
+
 const line = document.getElementById("line")!;
 const tag = document.getElementById("tag")!;
 
@@ -46,15 +48,7 @@ const chase = () => {
 chase();
 
 document.getElementById("open")!.addEventListener("click", () => {
-  const url = chrome.runtime.getURL("app.html");
-  chrome.windows.getAll({ populate: true, windowTypes: ["popup"] }, (wins) => {
-    const existing = wins.find((win) => win.tabs?.some((tab) => tab.url === url));
-    if (existing?.id != null) {
-      chrome.windows.update(existing.id, { focused: true, state: "normal", width: 400, height: 620 });
-      return;
-    }
-    chrome.windows.create({ url, type: "popup", width: 400, height: 620, focused: true });
-  });
+  showPanel(chrome.runtime.getURL("app.html"));
 });
 
 export {};

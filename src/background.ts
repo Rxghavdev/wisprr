@@ -91,7 +91,7 @@ async function handle(
     const origin = pageOrigin(sender);
     if (!origin) return { error: { code: 4100, message: "This page can't use wisprr." } };
     try {
-      return { result: await pageRequest(msg.method ?? "", msg.params, origin) };
+      return { result: await pageRequest(msg.method ?? "", msg.params, origin, sender.tab?.windowId) };
     } catch (err) {
       const code = err instanceof RpcError ? err.code : -32603;
       const message = err instanceof Error ? err.message : "failed";

@@ -1,4 +1,5 @@
 import { mnemonicToAccount } from "viem/accounts";
+import { showPanel } from "./panel";
 import { anonRequest } from "./rpc";
 import { allow, allowed } from "./sites";
 import { hasVault, sessionMnemonic } from "./vault";
@@ -74,7 +75,12 @@ export function pageOrigin(sender: chrome.runtime.MessageSender) {
   return "";
 }
 
-export async function pageRequest(method: string, params: unknown[] | undefined, origin: string) {
+export async function pageRequest(
+  method: string,
+  params: unknown[] | undefined,
+  origin: string,
+  anchor?: number,
+) {
   if (method === "eth_chainId") return "0x1";
   if (method === "net_version") return "1";
   if (method === "web3_clientVersion") return "wisprr";
@@ -86,7 +92,7 @@ export async function pageRequest(method: string, params: unknown[] | undefined,
   }
 
   if (method === "eth_requestAccounts" || method === "wallet_requestPermissions") {
-    const address = await ensure(origin);
+    const address = await ensure(origin, anchor);
     publish([address]);
     if (method === "wallet_requestPermissions") return [{ parentCapability: "eth_accounts" }];
     return [address];
@@ -115,14 +121,14 @@ export async function pageRequest(method: string, params: unknown[] | undefined,
   return anonRequest(method, params ?? []);
 }
 
-async function ensure(origin: string) {
+async function ensure(origin: string, anchor?: number) {
   const known = await allowed(origin);
   const address = await account();
   if (known && address) return address;
-  return enqueue(origin, known);
+  return enqueue(origin, known, anchor);
 }
 
-function enqueue(origin: string, known: boolean) {
+function enqueue(origin: string, known: boolean, anchor?: number) {
   const prev = gate;
   let release: () => void = () => {};
   gate = new Promise<void>((resolve) => {
@@ -130,29 +136,21 @@ function enqueue(origin: string, known: boolean) {
   });
   return prev
     .then(
-      () => openPrompt(origin, known),
-      () => openPrompt(origin, known),
+      () => openPrompt(origin, known, anchor),
+      () => openPrompt(origin, known, anchor),
     )
     .finally(release);
 }
 
-function openPrompt(origin: string, known: boolean) {
+function openPrompt(origin: string, known: boolean, anchor?: number) {
   const id = crypto.randomUUID();
   return new Promise<string>((resolve, reject) => {
     const prompt: Prompt = { origin, host: hostOf(origin), known, resolve, reject };
     prompts.set(id, prompt);
-    chrome.windows.create(
-      {
-        url: chrome.runtime.getURL(`connect.html?id=${encodeURIComponent(id)}`),
-        type: "popup",
-        width: 400,
-        height: 620,
-        focused: true,
-      },
-      (win) => {
-        prompt.windowId = win?.id;
-      },
-    );
+    const url = chrome.runtime.getURL(`connect.html?id=${encodeURIComponent(id)}`);
+    showPanel(url, anchor).then((windowId) => {
+      prompt.windowId = windowId;
+    });
   });
 }
 

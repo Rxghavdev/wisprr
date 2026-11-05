@@ -58,6 +58,7 @@ window.addEventListener("message", (event) => {
 
 const provider = {
   isWisprr: true,
+  providers: [] as unknown[],
   chainId: "0x1",
   selectedAddress: null as string | null,
   request(args: { method: string; params?: unknown[] }) {
@@ -119,13 +120,29 @@ function announce() {
 window.addEventListener("eip6963:requestProvider", announce);
 announce();
 
-const current = window.ethereum as { providers?: unknown[] } | undefined;
-if (!current) {
-  window.ethereum = provider;
-} else {
-  const list = Array.isArray(current.providers) ? current.providers : [current];
-  current.providers = list.concat(provider);
+function claim() {
+  const other = window.ethereum as { isWisprr?: boolean; providers?: unknown[] } | undefined;
+  if (other && other !== provider && !other.isWisprr) {
+    const prev = Array.isArray(other.providers) ? other.providers : [other];
+    provider.providers = [provider, ...prev.filter((item) => item !== provider)];
+  }
+  try {
+    Object.defineProperty(window, "ethereum", {
+      configurable: true,
+      enumerable: true,
+      get: () => provider,
+      set: (next) => {
+        if (!next || next === provider) return;
+        const prev = provider.providers.filter((item) => item !== next);
+        provider.providers = [provider, next, ...prev];
+      },
+    });
+  } catch {
+    window.ethereum = provider;
+  }
 }
+
+claim();
 
 window.setTimeout(() => {
   provider.request({ method: "eth_accounts" }).catch(() => {});
