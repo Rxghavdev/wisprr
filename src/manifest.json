@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "wisprr",
+  "version": "0.1.0",
+  "description": "A small Sepolia wallet.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "wisprr",
+    "default_icon": "icon.png"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "icons": { "128": "icon.png" },
+  "permissions": ["storage"]
+}
