@@ -132,6 +132,14 @@ h2 {
   line-height: 1;
   letter-spacing: -0.04em;
   font-variant-numeric: tabular-nums;
+  transition: color 0.15s steps(2);
+}
+
+/* A balance that failed to load looks broken on purpose, so it is obvious the
+   number is missing rather than genuinely zero. */
+.hero-bal.stale {
+  color: var(--dim);
+  text-decoration: underline dotted;
 }
 
 .addr {
@@ -272,6 +280,18 @@ button.net.on {
 }
 
 .tx:first-child { border-top: 0; }
+
+/* A list that is fetching, rather than a list that is empty. The distinction
+   matters: the old UI showed a blank list and then filled it. */
+.tx.pending {
+  color: var(--dim);
+  display: block;
+  animation: pulse 1.4s steps(2) infinite;
+}
+
+@keyframes pulse {
+  50% { opacity: 0.35; }
+}
 
 .tx .hash {
   margin: 4px 0 0;
@@ -461,8 +481,170 @@ summary:hover { color: var(--ink); }
   font-weight: 400;
 }
 
-/* --- shared with connect.html ------------------------------------------- */
+/* A finished transaction. The hash is shown in full because it is the only proof
+   the user can check themselves, and a truncated one cannot be pasted anywhere. */
+.receipt {
+  margin: 14px 0 0;
+  padding: 12px;
+  border: 1px solid var(--line-hi);
+  background: var(--glow);
+}
 
+.receipt.bad {
+  border-color: var(--ink);
+}
+
+.receipt-label {
+  margin: 0 0 8px;
+  color: var(--dim);
+  font-size: 11px;
+  line-height: 1.5;
+  font-weight: 400;
+}
+
+.receipt-hash {
+  display: block;
+  margin: 0 0 10px;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.6;
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
+.receipt-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.receipt-actions button {
+  margin: 0;
+  padding: 8px;
+  font-size: 10px;
+}
+
+.receipt-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border: 1px solid var(--line-hi);
+  color: var(--ink);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: background 0.15s steps(2), color 0.15s steps(2);
+}
+
+.receipt-link:hover {
+  background: var(--ink);
+  color: #000;
+}
+
+/* Per-row actions in the activity list. */
+.row-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+button.mini, .mini {
+  width: auto;
+  margin: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--line-hi);
+  background: transparent;
+  color: var(--dim);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-decoration: none;
+}
+
+button.mini:hover, .mini:hover {
+  background: var(--ink);
+  color: #000;
+}
+
+.tx code.receipt-hash {
+  grid-column: 1 / -1;
+  margin: 6px 0 0;
+  color: var(--dim);
+}
+
+/* Transport indicator. Green means the mixnet is carrying requests; the moment it
+   falls back, this goes amber and says so. Never claim privacy the code is not
+   delivering. */
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  font-size: 10px;
+  color: var(--dim);
+}
+
+.dot-live {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink);
+  animation: breathe 2.4s steps(2) infinite;
+}
+
+.dot-live.direct {
+  background: #b08a3e;
+  animation: none;
+}
+
+@keyframes breathe {
+  50% { opacity: 0.3; }
+}
+
+.transport-text {
+  flex: 1;
+  line-height: 1.4;
+}
+
+.transport button.mini {
+  flex: none;
+}
+
+/* Network picker. Switching transport is a real choice with a real tradeoff, so it
+   sits in the open rather than behind a menu. */
+.net-pick {
+  flex: none;
+  width: auto;
+  margin: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--line-hi);
+  background: #000;
+  color: var(--ink);
+  font: inherit;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: none;
+}
+
+.net-pick:disabled {
+  opacity: 0.4;
+}
+
+.box-note {
+  padding: 12px;
+  border: 1px solid var(--line);
+}
+
+.box-note .quiet { margin-bottom: 10px; }
+
+/* --- shared with connect.html ------------------------------------------- */
 .tag {
   min-height: 1.4em;
   margin: 10px 0 20px;

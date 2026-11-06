@@ -73,6 +73,17 @@
             <button id="use-sepolia" class="net" type="button">Sepolia</button>
           </div>
 
+          <div class="transport" id="transport">
+            <span class="dot-live" id="mode-dot"></span>
+            <span class="transport-text" id="mode-text">checking network…</span>
+            <select id="net-pick" class="net-pick">
+              <option value="nox">Nox</option>
+              <option value="tor">Tor</option>
+              <option value="nym">Nym</option>
+              <option value="direct">Direct</option>
+            </select>
+          </div>
+
           <nav class="tabs" role="tablist">
             <button class="tab on" data-tab="receive" type="button">Receive</button>
             <button class="tab" data-tab="send" type="button">Send</button>
@@ -94,8 +105,21 @@
             <hr class="rule" />
 
             <p class="lede">Payments that arrived for you.</p>
-            <button id="scan" class="ghost" type="button">Scan for payments</button>
+            <div class="actions">
+              <button id="scan" class="ghost" type="button">Scan for payments</button>
+              <button id="scan-deep" class="ghost" type="button">Scan further back</button>
+            </div>
+            <p class="quiet" id="scan-note" hidden></p>
             <ul class="txs" id="found"></ul>
+
+            <hr class="rule" />
+
+            <p class="lede">Moving a payment out. Sweeping to your own vault is refused, because the chain would record that the stealth address is yours.</p>
+            <div class="box-note">
+              <p class="quiet">The guard checks five heuristics from the published deanonymisation work: destination reuse, round trips, collector sweeps, gas funding and timing. Two of those block outright.</p>
+              <button id="guard-demo" class="ghost" type="button">Explain the guard</button>
+              <ul class="txs" id="guard-out"></ul>
+            </div>
           </div>
 
           <div class="tab-body" data-body="send" hidden>
@@ -103,6 +127,18 @@
             <label>Meta-address <input id="pay-meta" spellcheck="false" placeholder="st:eth:0x…" /></label>
             <label>ETH <input id="pay-amt" inputmode="decimal" value="0.001" /></label>
             <button id="pay" type="button">Send privately</button>
+            <div id="pay-result" hidden></div>
+
+            <hr class="rule" />
+
+            <p class="lede">Moving USDC out of a stealth address without giving it any gas. The stealth key signs offline and this wallet submits it.</p>
+            <label>Stealth address <input id="tk-addr" spellcheck="false" placeholder="0x…" /></label>
+            <label>Send USDC to <input id="tk-to" spellcheck="false" placeholder="0x…" /></label>
+            <div class="actions">
+              <button id="tk-check" class="ghost" type="button">Check USDC balance</button>
+              <button id="tk-sweep" class="ghost" type="button">Sweep USDC</button>
+            </div>
+            <p class="quiet" id="tk-note" hidden></p>
           </div>
 
           <div class="tab-body" data-body="audit" hidden>

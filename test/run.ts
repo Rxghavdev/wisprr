@@ -197,7 +197,6 @@ group("message signing");
 }
 
 /* ---------------------------------------------------------------- summary */
-
 console.log(`\n${"-".repeat(48)}`);
 console.log(`${pass} passed, ${fail} failed`);
 if (fail) {

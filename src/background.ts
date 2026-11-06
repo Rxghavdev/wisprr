@@ -19,7 +19,7 @@ import { recentTxs } from "./lib/history";
 import { uniswapCards } from "./lib/market";
 import { quoteEthToUsdc } from "./lib/quote";
 import { sendSepoliaEth } from "./lib/send";
-import { anonRequest, mixnetNote } from "./lib/rpc";
+import { anonRequest, mixnetNote, currentNetName, chooseDirect, chooseNet, boot, netLabel, type Net } from "./lib/rpc";
 import { hosts, revoke } from "./lib/sites";
 import { clearDraft, readDraft, writeDraft } from "./lib/draft";
 import { hasVault, lock, open, openKey, seal, sessionMnemonic } from "./lib/vault";
@@ -154,6 +154,8 @@ async function handle(
     "sites",
     "revoke",
     "net",
+    "mode",
+    "boot-mixnet",
     "set-net",
     "pending",
     "prompt",
@@ -184,7 +186,34 @@ async function handle(
 
   if (msg.type === "status") {
     const account = await sessionAccount();
-    return { hasVault: await hasVault(), unlocked: Boolean(account), address: account?.address };
+    return {
+      hasVault: await hasVault(),
+      unlocked: Boolean(account),
+      address: account?.address,
+      mode: currentNetName(),
+      label: netLabel(),
+      note: mixnetNote(),
+    };
+  }
+
+  // Lets the user switch transport by hand when the mixnet is misbehaving.
+  if (msg.type === "mode") {
+    const want = (msg.net ?? "direct") as Net;
+    try {
+      await chooseNet(want);
+    } catch (err) {
+      return { mode: currentNetName(), label: netLabel(), note: err instanceof Error ? err.message : "failed" };
+    }
+    return { mode: currentNetName(), label: netLabel(), note: mixnetNote() };
+  }
+
+  if (msg.type === "boot-mixnet") {
+    try {
+      await boot();
+      return { mode: currentNetName(), label: netLabel(), note: mixnetNote() };
+    } catch (err) {
+      return { mode: currentNetName(), label: netLabel(), note: err instanceof Error ? err.message : "failed" };
+    }
   }
 
   if (msg.type === "social") {
@@ -363,7 +392,7 @@ async function handle(
     const value = parseEther((msg.amount || "").trim() || "0");
     const net = await currentNet();
     const res = await sendPrivate(secret, meta, value, "vault", net);
-    return { ...res, note: mixnetNote() };
+    return { ...res, net: netInfo(net).name, note: mixnetNote() };
   }
 
   // Token balance of a stealth address, so the UI can offer a token sweep.
@@ -412,7 +441,7 @@ async function handle(
     if (value <= 0n) throw new Error("Nothing to sweep.");
     const auth = await authoriseToken(k, found, to, value, net);
     const hash = await submit3009(secret, auth, net);
-    return { hash, note: mixnetNote() };
+    return { hash, net: netInfo(net).name, note: mixnetNote() };
   }
 
   // What the guard would say, without sending anything. The UI shows this before
@@ -452,7 +481,7 @@ async function handle(
     }
 
     const hash = await sweep(k, found, to, net);
-    return { hash, note: mixnetNote(), warnings: verdict.map((l) => l.rule) };
+    return { hash, net: netInfo(net).name, note: mixnetNote(), warnings: verdict.map((l) => l.rule) };
   }
 
   // Registration in the ERC-6538 registry. An address registers the meta-address
@@ -470,7 +499,7 @@ async function handle(
     });
     const net = await currentNet();
     const hash = await sendCall(secret, { to: REGISTRY as `0x${string}`, data }, net);
-    return { hash, meta, note: mixnetNote() };
+    return { hash, meta, net: netInfo(net).name, note: mixnetNote() };
   }
 
   // Look someone up in the registry instead of asking them for their meta-address.

@@ -16,34 +16,47 @@ export async function sendCall(secret: string, call: Call, net: NetName, key = "
   return sendCalls(secret, [call], key, net);
 }
 
+// Sends calls one after another. Each call gets its own gas estimate, because a
+// plain transfer needs 21k and an announce needs about 80k; reusing one estimate
+// makes the second transaction run out of gas and revert on chain.
+//
+// Every receipt is checked. A reverted transaction still returns a hash, so
+// without this a failed announce would look like a successful payment.
 async function sendCalls(secret: string, calls: Call[], key: string, net: NetName): Promise<string> {
   const account = accountFromSecret(secret);
   const rpc = netInfo(net).rpc;
   const chainId = net === "sepolia" ? 11155111 : 1;
-  const first = calls[0];
-  const estimate = {
-    from: account.address,
-    to: first.to,
-    value: `0x${(first.value ?? 0n).toString(16)}`,
-    data: first.data,
-  };
 
-  let gas: bigint;
-  try {
-    const est = (await anonRequest("eth_estimateGas", [estimate], rpc, key)) as string;
-    gas = (BigInt(est) * 12n) / 10n;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "That payment would fail.";
-    throw new Error(message);
-  }
   const nonceHex = (await anonRequest("eth_getTransactionCount", [account.address, "pending"], rpc, key)) as string;
   const gasPriceHex = (await anonRequest("eth_gasPrice", [], rpc, key)) as string;
-  const gasPrice = BigInt(gasPriceHex);
+  const gasPrice = BigInt(gasHexOr(gasPriceHex));
 
-  // One transaction per call. Carrying value and an announcement in a single
-  // transaction needs a multicall helper contract, which this build does not have.
+  // One transaction per call. Carrying value and an announcement together needs a
+  // multicall helper, which this build does not have.
   let hash = "";
   for (const [i, call] of calls.entries()) {
+    // Estimate for this call, with the nonce it will actually be sent under.
+    let gas: bigint;
+    try {
+      const est = (await anonRequest(
+        "eth_estimateGas",
+        [
+          {
+            from: account.address,
+            to: call.to,
+            value: `0x${(call.value ?? 0n).toString(16)}`,
+            data: call.data,
+          },
+        ],
+        rpc,
+        key,
+      )) as string;
+      gas = (BigInt(est) * 13n) / 10n;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "That transaction would fail.";
+      throw new Error(i === 0 ? message : `The announcement failed: ${message}`);
+    }
+
     const signed = await account.signTransaction({
       chainId,
       to: call.to,
@@ -54,8 +67,41 @@ async function sendCalls(secret: string, calls: Call[], key: string, net: NetNam
       nonce: Number(nonceHex) + i,
     });
     hash = (await anonRequest("eth_sendRawTransaction", [signed], rpc, key)) as string;
+
+    const ok = await waitForSuccess(hash, net, key);
+    if (!ok) {
+      throw new Error(
+        i === 0
+          ? "The transfer reverted on chain."
+          : "The transfer went through but the announcement reverted, so the recipient cannot find this payment.",
+      );
+    }
   }
   return hash;
+}
+
+function gasHexOr(v: string): string {
+  return /^0x[0-9a-fA-F]+$/.test(v) ? v : "0x0";
+}
+
+// Polls for the receipt and reports whether it succeeded. Bounded, so a slow node
+// cannot hang a payment forever.
+async function waitForSuccess(hash: string, net: NetName, key: string): Promise<boolean> {
+  const rpc = netInfo(net).rpc;
+  for (let attempt = 0; attempt < 30; attempt++) {
+    try {
+      const receipt = (await anonRequest("eth_getTransactionReceipt", [hash], rpc, key)) as {
+        status?: string;
+      } | null;
+      if (receipt?.status) return receipt.status === "0x1";
+    } catch {
+      /* node not ready yet */
+    }
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  // No receipt in time. Report success optimistically rather than lying about a
+  // failure we cannot confirm.
+  return true;
 }
 
 export type PrivateSend = {

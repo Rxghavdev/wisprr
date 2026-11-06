@@ -11,9 +11,11 @@ const CHECKPOINT = (net: NetName) => `wisprr-scan-${net}`;
 // Public nodes cap eth_getLogs at 50,000 blocks, and the cap is exclusive. Sit
 // under it with margin so one provider's stricter limit does not stop a scan.
 const CHUNK = 40_000n;
-// First scan has to start somewhere. Two days of Sepolia is plenty for a demo and
-// keeps the first run to a handful of calls.
-const FIRST_LOOKBACK = 400_000n;
+// A first scan needs a starting point. About half a day of Sepolia: enough to
+// catch a payment you just made, few enough requests to finish quickly. The deep
+// scan reaches further back on purpose.
+const FIRST_LOOKBACK = 30_000n;
+const DEEP_LOOKBACK = 400_000n;
 
 export type Found = {
   address: Hex;
@@ -58,28 +60,74 @@ async function logs(net: NetName, from: bigint, to: bigint): Promise<Log[]> {
   return rows ?? [];
 }
 
-// Public nodes disagree about what range they will serve and some prune history
-// outright. A scan that assumed one limit would fail on the next provider, so a
-// rejected range is halved and retried instead of aborting the whole scan.
-async function logsAdaptive(net: NetName, from: bigint, to: bigint): Promise<{ logs: Log[]; next: bigint }> {
-  let width = to - from;
-  let start = from;
+// Public nodes disagree about what range they will serve, and some prune history
+// outright. Neither is fatal: a rejected range is split and retried, and a range
+// the node simply does not have is skipped rather than aborting the whole scan.
+//
+// The old version had a real bug. On failure it halved the width but kept the same
+// start, so with a small enough width it either spun forever or threw, and
+// "pruned history" was not recognised as retryable at all.
+const MAX_RANGE = 40_000n;
+const MIN_RANGE = 500n;
+
+function rangeTooWide(message: string): boolean {
+  return /range|limit|too many|exceed|10000|50000|block range/i.test(message);
+}
+
+function pruned(message: string): boolean {
+  return /pruned|archive|unavailable|not available|missing trie/i.test(message);
+}
+
+async function logsAdaptive(
+  net: NetName,
+  from: bigint,
+  to: bigint,
+  deadline: number,
+): Promise<{ logs: Log[]; skipped: number }> {
   const out: Log[] = [];
+  let skipped = 0;
+  let start = from;
+
   while (start <= to) {
-    let end = start + width > to ? to : start + width;
-    try {
-      out.push(...(await logs(net, start, end)));
-      start = end + 1n;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "";
-      const tooWide = /range|limit|too many|exceed|10000|50000/i.test(message);
-      if (width <= 1_000n || !tooWide) throw err;
-      width = width / 2n;
-      end = start + width > to ? to : start + width;
-      if (end < start) throw err;
+    // The deadline is checked here as well as in the caller. A single slice can
+    // halve many times, and a stalled mixnet request must not outlive the budget.
+    if (Date.now() > deadline) break;
+
+    const end = start + MAX_RANGE > to ? to : start + MAX_RANGE;
+    let lo = start;
+    let hi = end;
+    let width = hi - lo + 1n;
+
+    // Narrow the window until the node accepts it. "Pruned" is not a reason to
+    // give up: this node serves a narrower range happily, so shrink first and only
+    // skip the slice once it is too small to be useful.
+    for (;;) {
+      if (Date.now() > deadline) break;
+      try {
+        out.push(...(await logs(net, lo, hi)));
+        break;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "";
+        const canShrink = rangeTooWide(message) || pruned(message);
+        if (!canShrink) throw err;
+        if (width <= MIN_RANGE) {
+          skipped += 1;
+          break;
+        }
+        width = width / 2n;
+        hi = lo + width - 1n;
+        if (hi < lo) {
+          skipped += 1;
+          break;
+        }
+      }
     }
+
+    // Always advance, whatever happened above. This is what the old loop missed.
+    start = end + 1n;
   }
-  return { logs: out, next: to + 1n };
+
+  return { logs: out, skipped };
 }
 
 // Opens one announcement. Returns it only when the recogniser claims it, so a
@@ -121,11 +169,15 @@ function tryRecognise(recognise: Recognise, log: Log): Found | undefined {
 }
 
 export async function scan(keys: Keys, net: NetName, full = false): Promise<Found[]> {
-  return scanWith((eph, tag) => {
-    const priv = openPayment(keys, eph, tag);
-    if (!priv) return;
-    return accountFor(priv).address;
-  }, net, full);
+  return scanWith(
+    (eph, tag) => {
+      const priv = openPayment(keys, eph, tag);
+      if (!priv) return;
+      return accountFor(priv).address;
+    },
+    net,
+    full,
+  );
 }
 
 // The scanner, parameterised by how an address is recognised. The owner opens the
@@ -138,33 +190,69 @@ export type Recognise = (ephemeralPubKey: Hex, viewTag: number) => Hex | undefin
 // filtered out afterwards. They are never recognised, so they cannot leak.
 export type TimedRecognise = (ephemeralPubKey: Hex, viewTag: number, when: number) => Hex | undefined;
 
-export async function scanScoped(recognise: TimedRecognise, net: NetName, window?: { from: number; to: number }): Promise<Found[]> {
+export async function scanScoped(
+  recognise: TimedRecognise,
+  net: NetName,
+  window?: { from: number; to: number },
+): Promise<Found[]> {
+  const found = await walk((row, when) => tryTimed(recognise, row, when), net, {
+    reset: Boolean(window),
+    needTime: true,
+  });
+  return withBalances(found, net);
+}
+
+// One walk over the announcement log, shared by the owner scan and the auditor
+// scan. Bounded by a wall-clock deadline so a slow or uncooperative node cannot
+// leave the UI spinning forever, which is exactly what happened before.
+const SCAN_BUDGET_MS = 45_000;
+
+type Hit = (row: Log, when: number) => Found | undefined;
+
+async function walk(
+  hit: Hit,
+  net: NetName,
+  opts: { reset?: boolean; needTime?: boolean; deep?: boolean } = {},
+): Promise<Found[]> {
+  const started = Date.now();
+  const deadline = started + SCAN_BUDGET_MS;
   const head = await latestBlock(net);
-  // A grant with a window only ever needs to look at the block range it covers.
-  // Clamping here is a second, independent guarantee that nothing outside the
-  // mandate is even fetched.
-  const mark = window ? undefined : await checkpoint(net);
-  let from = mark ?? head - FIRST_LOOKBACK;
+  const mark = opts.reset ? undefined : await checkpoint(net);
+  // A reset scan starts from scratch, and a deep one starts further back.
+  const lookback = opts.deep ? DEEP_LOOKBACK : FIRST_LOOKBACK;
+  let from = mark ?? head - lookback;
   if (from < 1n) from = 1n;
 
   const found = new Map<string, Found>();
+  let reached = from;
+
   for (let start = from; start <= head; start += CHUNK) {
+    if (Date.now() > deadline) break;
     const last = start + CHUNK - 1n;
     const to = last > head ? head : last;
-    const { logs: rows } = await logsAdaptive(net, start, to);
-    // Block timestamps are needed for the window check, fetched once per batch.
-    const stamp = await batchTimestamps(net, rows.map((r) => r.blockNumber));
+    const { logs: rows } = await logsAdaptive(net, start, to, deadline);
+    reached = to + 1n;
+
+    // Timestamps are only needed when a window has to be enforced.
+    const stamp = opts.needTime ? await batchTimestamps(net, rows.map((r) => r.blockNumber)) : new Map<string, number>();
     for (const row of rows) {
-      const when = stamp.get(row.blockNumber) ?? 0;
-      const hit = tryTimed(recognise, row, when);
-      if (hit && !found.has(hit.address.toLowerCase())) found.set(hit.address.toLowerCase(), hit);
+      const got = hit(row, stamp.get(row.blockNumber) ?? 0);
+      if (got && !found.has(got.address.toLowerCase())) found.set(got.address.toLowerCase(), got);
     }
   }
-  if (!window) await saveCheckpoint(net, head + 1n);
 
-  const out = [...found.values()];
+  // Checkpoint only what was actually looked at, so a scan cut short resumes
+  // where it stopped instead of skipping the blocks it never reached.
+  if (reached > from) await saveCheckpoint(net, reached);
+
+  return [...found.values()];
+}
+
+// Balances are read per address through the mixnet, so no single node learns that
+// these addresses are one wallet.
+async function withBalances(rows: Found[], net: NetName): Promise<Found[]> {
   await Promise.all(
-    out.map(async (row) => {
+    rows.map(async (row) => {
       try {
         const bal = (await anonRequest("eth_getBalance", [row.address, "latest"], netInfo(net).rpc, "scan")) as string;
         row.eth = formatEther(BigInt(bal));
@@ -174,7 +262,7 @@ export async function scanScoped(recognise: TimedRecognise, net: NetName, window
       }
     }),
   );
-  return out.sort((a, b) => (a.block < b.block ? 1 : -1));
+  return rows.sort((a, b) => (a.block < b.block ? 1 : -1));
 }
 
 // One timestamp per distinct block, through the mixnet.
@@ -229,40 +317,9 @@ function tryTimed(recognise: TimedRecognise, log: Log, when: number): Found | un
   };
 }
 
-export async function scanWith(recognise: Recognise, net: NetName, full = false): Promise<Found[]> {  const head = await latestBlock(net);
-  const mark = full ? undefined : await checkpoint(net);
-  let from = mark ?? head - FIRST_LOOKBACK;
-  if (from < 1n) from = 1n;
-
-  const found = new Map<string, Found>();
-  for (let start = from; start <= head; start += CHUNK) {
-    const last = start + CHUNK - 1n;
-    const to = last > head ? head : last;
-    const { logs: rows } = await logsAdaptive(net, start, to);
-    for (const row of rows) {
-      const hit = tryRecognise(recognise, row);
-      // A stealth address only ever receives once in practice, but a duplicate
-      // announcement must not double-count.
-      if (hit && !found.has(hit.address.toLowerCase())) found.set(hit.address.toLowerCase(), hit);
-    }
-  }
-  await saveCheckpoint(net, head + 1n);
-
-  const out = [...found.values()];
-  // Balances are read per address through the mixnet, so no single node learns
-  // that these addresses are one wallet.
-  await Promise.all(
-    out.map(async (row) => {
-      try {
-        const bal = (await anonRequest("eth_getBalance", [row.address, "latest"], netInfo(net).rpc, "scan")) as string;
-        row.eth = formatEther(BigInt(bal));
-        row.spent = BigInt(bal) === 0n;
-      } catch {
-        row.eth = "";
-      }
-    }),
-  );
-  return out.sort((a, b) => (a.block < b.block ? 1 : -1));
+export async function scanWith(recognise: Recognise, net: NetName, full = false): Promise<Found[]> {
+  const found = await walk((row) => tryRecognise(recognise, row), net, { reset: full, deep: full });
+  return withBalances(found, net);
 }
 
 export async function pendingCount(keys: Keys, net: NetName): Promise<number> {
@@ -274,3 +331,4 @@ export async function pendingCount(keys: Keys, net: NetName): Promise<number> {
 export const ANNOUNCE = parseAbiItem(
   "function announce(uint256 schemeId, address stealthAddress, bytes ephemeralPubKey, bytes metadata)",
 );
+

@@ -13,9 +13,23 @@ function fail(err: unknown) {
   node.textContent = err instanceof Error ? err.message : "Something broke.";
 }
 
-async function ask(msg: Record<string, unknown>) {
-  const res = await chrome.runtime.sendMessage(msg);
-  if (res?.error) throw new Error(res.error);
+async function ask(msg: Record<string, unknown>, timeoutMs = 0) {
+  const send = chrome.runtime.sendMessage(msg);
+  if (!timeoutMs) {
+    const res = await send;
+    if (res?.error) throw new Error(res.error);
+    return res;
+  }
+  // Chrome stops an idle service worker. If that happens mid-request the promise
+  // never settles, which is how the scan ticker reached 900 seconds. This bounds
+  // it, so the UI can report a failure instead of pretending to work.
+  const res = await Promise.race([
+    send,
+    new Promise((_, reject) =>
+      window.setTimeout(() => reject(new Error("The wallet stopped responding. Try again.")), timeoutMs),
+    ),
+  ]);
+  if ((res as { error?: string })?.error) throw new Error((res as { error: string }).error);
   return res;
 }
 
@@ -64,15 +78,155 @@ async function paintHome(address: string) {
   show("home");
   paintSites().catch(() => {});
   paintMeta().catch(() => {});
-  paintActivity().catch(() => {});
   paintGrants().catch(() => {});
+  // Balance first: it is the thing the user waits for.
+  await paintBalance();
+  paintActivity().catch(() => {});
+}
+// Kept separate from paintHome so a send or a sweep can refresh just the number
+// without rebuilding the whole screen.
+//
+// The first call after reopening the panel has to boot the mixnet, which takes
+// seconds, and the service worker may have been suspended since. Without a timeout
+// the promise simply never settles and the balance sits on the ellipsis forever.
+async function paintBalance(attempt = 1): Promise<void> {
+  const bal = $("bal");
+  const note = $("note");
+  bal.textContent = attempt === 1 ? "…" : "…";
+  note.textContent = attempt === 1 ? "reading through the mixnet…" : "still waiting on the mixnet…";
+
   try {
-    const res = await ask({ type: "balance" });
-    $("bal").textContent = `${trimEth(res.eth)} ETH`;
-    $("note").textContent = res.note;
+    const res = await ask({ type: "balance" }, 90_000);
+    bal.textContent = `${trimEth(res.eth)} ETH`;
+    note.textContent = res.note;
+    bal.classList.remove("stale");
   } catch (err) {
-    $("bal").textContent = "—";
+    // One retry, because the usual cause is a suspended worker rather than a real
+    // failure, and waking it is enough.
+    if (attempt < 2) {
+      window.setTimeout(() => void paintBalance(attempt + 1), 400);
+      return;
+    }
+    bal.textContent = "—";
+    bal.classList.add("stale");
+    note.textContent = "Could not read the balance. Tap the balance to retry.";
     fail(err);
+  }
+}
+
+// Tapping the balance retries, so a dead first read is never a dead end.
+function wireBalanceRetry() {
+  const bal = $("bal");
+  bal.style.cursor = "none";
+  bal.addEventListener("click", () => void paintBalance());
+}
+
+// A generation token. Every paint bumps it; an older response that lands late
+// sees a newer token and drops itself, so a slow first call can never overwrite
+// a fast second one.
+let activityGen = 0;
+let scanGen = 0;
+
+function placeholder(list: HTMLElement, text: string) {
+  list.replaceChildren();
+  const li = document.createElement("li");
+  li.className = "tx pending";
+  li.textContent = text;
+  list.append(li);
+}
+
+async function paintActivity() {
+  const list = $("txs");
+  const gen = ++activityGen;
+  placeholder(list, "loading activity…");
+  let pending = false;
+  try {
+    const res = await ask({ type: "activity" });
+    if (gen !== activityGen) return;
+    const net = (await ask({ type: "net" })) as { name: string };
+    const rows = (res.rows ?? []) as {
+      hash: string;
+      way: string;
+      eth: string;
+      status: string;
+      when?: string;
+    }[];
+    list.replaceChildren();
+    if (!rows.length) {
+      const li = document.createElement("li");
+      li.className = "tx";
+      li.textContent = "Nothing yet.";
+      list.append(li);
+      return;
+    }
+    for (const row of rows) {
+      const li = document.createElement("li");
+      li.className = "tx";
+
+      const body = document.createElement("div");
+      const head = document.createElement("p");
+      head.className = "k";
+      // A pending row says so, rather than looking like a verdict.
+      const verdict = row.status === "pending" ? "confirming…" : row.status;
+      head.textContent = `${row.way} · ${row.eth} ETH · ${verdict}${row.when ? ` · ${row.when}` : ""}`;
+      body.append(head);
+      if (row.status === "pending") {
+        const note = document.createElement("p");
+        note.className = "hash";
+        note.textContent = "Not mined yet. This will update on its own.";
+        body.append(note);
+        pending = true;
+      }
+      li.append(body);
+
+      // Full hash and a link, so any row can be checked on the explorer.
+      const actions = document.createElement("div");
+      actions.className = "row-actions";
+      const copy = document.createElement("button");
+      copy.className = "mini";
+      copy.type = "button";
+      copy.textContent = "Copy";
+      copy.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(row.hash);
+          copy.textContent = "Copied";
+          window.setTimeout(() => (copy.textContent = "Copy"), 1600);
+        } catch {
+          copy.textContent = "Blocked";
+        }
+      });
+      const open = document.createElement("a");
+      open.className = "mini link";
+      open.textContent = "Explorer";
+      open.target = "_blank";
+      open.rel = "noreferrer noopener";
+      open.href = `https://${net.name === "Sepolia" ? "eth-sepolia" : "eth"}.blockscout.com/tx/${row.hash}`;
+      actions.append(copy, open);
+      li.append(actions);
+
+      const hash = document.createElement("code");
+      hash.className = "receipt-hash";
+      hash.textContent = row.hash;
+      li.append(hash);
+
+      list.append(li);
+    }
+  } catch (err) {
+    if (gen !== activityGen) return;
+    list.replaceChildren();
+    const li = document.createElement("li");
+    li.className = "tx";
+    li.textContent = err instanceof Error ? err.message : "Activity didn't load.";
+    list.append(li);
+    pending = false;
+  }
+
+  // A transaction that was still mining when the list loaded resolves in a few
+  // seconds. Re-read once so the row does not sit on "confirming" forever.
+  if (pending) {
+    window.setTimeout(() => {
+      if (gen === activityGen) void paintActivity();
+    }, 6000);
   }
 }
 
@@ -81,24 +235,60 @@ async function paintMeta() {
   $("meta").textContent = res.meta;
 }
 
-async function paintActivity() {
-  const list = $("txs");
-  list.replaceChildren();
-  const res = await ask({ type: "activity" });
-  const rows = (res.rows ?? []) as { hash: string; way: string; eth: string; status: string }[];
-  if (!rows.length) {
-    const li = document.createElement("li");
-    li.className = "tx";
-    li.textContent = "Nothing yet.";
-    list.append(li);
-    return;
-  }
-  for (const row of rows) {
-    const li = document.createElement("li");
-    li.className = "tx";
-    li.textContent = `${row.way} · ${row.eth} ETH · ${row.status} · ${short(row.hash)}`;
-    list.append(li);
-  }
+/* --------------------------------------------------------------- receipts */
+
+type Receipt = { label: string; hash: string; net?: string; ok?: boolean };
+
+// A finished transaction, shown in full. The hash is never truncated, because a
+// user checking a payment needs to paste it into an explorer and that is the only
+// proof this actually happened.
+function receiptNode(r: Receipt): HTMLElement {
+  const wrap = document.createElement("div");
+  wrap.className = "receipt" + (r.ok === false ? " bad" : "");
+
+  const head = document.createElement("p");
+  head.className = "receipt-label";
+  head.textContent = r.label;
+  wrap.append(head);
+
+  const hash = document.createElement("code");
+  hash.className = "receipt-hash";
+  hash.textContent = r.hash;
+  wrap.append(hash);
+
+  const actions = document.createElement("div");
+  actions.className = "receipt-actions";
+
+  const copy = document.createElement("button");
+  copy.className = "ghost";
+  copy.type = "button";
+  copy.textContent = "Copy hash";
+  copy.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(r.hash);
+      copy.textContent = "Copied";
+      window.setTimeout(() => (copy.textContent = "Copy hash"), 1600);
+    } catch {
+      copy.textContent = "Blocked";
+    }
+  });
+
+  const open = document.createElement("a");
+  open.className = "receipt-link";
+  open.textContent = "View on explorer";
+  open.target = "_blank";
+  open.rel = "noreferrer noopener";
+  open.href = `https://${r.net === "Sepolia" ? "eth-sepolia" : "eth"}.blockscout.com/tx/${r.hash}`;
+
+  actions.append(copy, open);
+  wrap.append(actions);
+  return wrap;
+}
+
+// Replaces the old one-line note with a real receipt.
+function showReceipt(target: HTMLElement, r: Receipt) {
+  target.replaceChildren(receiptNode(r));
+  target.hidden = false;
 }
 
 async function paintSites() {
@@ -215,10 +405,19 @@ $("import").addEventListener("click", async () => {
 });
 
 $("unlock").addEventListener("click", async () => {
+  const btn = $("unlock") as HTMLButtonElement;
+  const field = $("unlock-pw") as HTMLInputElement;
+  btn.disabled = true;
+  $("note").textContent = "unlocking…";
   try {
-    await afterAccount((await ask({ type: "unlock", password: ($("unlock-pw") as HTMLInputElement).value })).address);
+    const res = await ask({ type: "unlock", password: field.value }, 20_000);
+    field.value = "";
+    await afterAccount(res.address);
   } catch (err) {
+    $("note").textContent = "";
     fail(err);
+  } finally {
+    btn.disabled = false;
   }
 });
 
@@ -264,31 +463,63 @@ $("copy-meta").addEventListener("click", async () => {
 
 $("pay").addEventListener("click", async () => {
   $("note").textContent = "paying…";
+  $("pay-result").hidden = true;
   try {
     const res = await ask({
       type: "pay",
       meta: ($("pay-meta") as HTMLInputElement).value,
       amount: ($("pay-amt") as HTMLInputElement).value,
     });
-    $("note").textContent = `paid to ${short(res.stealthAddress)} · ${res.hash.slice(0, 10)}… · ${res.note}`;
-    await paintActivity();
+    $("note").textContent = `paid to ${short(res.stealthAddress)}`;
+    showReceipt($("pay-result"), {
+      label: "Payment sent. Both transactions are in this hash, the transfer and the announcement.",
+      hash: res.hash,
+      net: res.net,
+    });
+    // Balance and activity both changed, so refresh both.
+    await paintBalance();
+    paintActivity().catch(() => {});
   } catch (err) {
     fail(err);
   }
 });
 
-$("scan").addEventListener("click", async () => {
+async function runScan(deep: boolean) {
   const list = $("found");
-  list.replaceChildren();
-  $("note").textContent = "scanning through the mixnet…";
+  const gen = ++scanGen;
+  const limitMs = deep ? 180_000 : 70_000;
+  placeholder(list, "scanning…");
+  $("note").textContent = deep ? "scanning further back through the mixnet…" : "scanning through the mixnet…";
+
+  const began = Date.now();
+  const ticker = window.setInterval(() => {
+    const secs = Math.round((Date.now() - began) / 1000);
+    placeholder(list, `scanning… ${secs}s${deep ? " (deep scan)" : ""}`);
+    // Never let the label outlive the timeout: if the worker died, say so.
+    if (Date.now() - began > limitMs) {
+      window.clearInterval(ticker);
+      placeholder(list, "The wallet stopped responding. Reopen the panel and try again.");
+    }
+  }, 1000);
+
   try {
-    const res = await ask({ type: "scan" });
-    $("note").textContent = res.note;
+    const res = await ask({ type: "scan", full: deep }, limitMs);
+    if (gen !== scanGen) return;
+    window.clearInterval(ticker);
     const rows = (res.rows ?? []) as { address: string; eth: string; spent: boolean; txHash: string }[];
+
+    // Say plainly that it finished. Before this the list just stopped changing,
+    // which is indistinguishable from a scan that died.
+    const took = Math.round((Date.now() - began) / 1000);
+    $("note").textContent = `scan finished in ${took}s · ${rows.length} payment${rows.length === 1 ? "" : "s"} found`;
+
+    list.replaceChildren();
     if (!rows.length) {
       const li = document.createElement("li");
       li.className = "tx";
-      li.textContent = "No private payments found.";
+      li.textContent = deep
+        ? "Scan finished. No private payments, even looking further back."
+        : "Scan finished. Nothing in the last few hours. Try Scan further back.";
       list.append(li);
       return;
     }
@@ -298,13 +529,31 @@ $("scan").addEventListener("click", async () => {
       const body = document.createElement("div");
       body.textContent = `${row.eth} ETH · ${short(row.address)}${row.spent ? " · swept" : ""}`;
       li.append(body);
+
+      // Show USDC as well, since a payment can arrive as a token and would
+      // otherwise look empty at 0 ETH.
+      const tok = document.createElement("p");
+      tok.className = "hash";
+      tok.textContent = "reading USDC…";
+      li.append(tok);
+      ask({ type: "token-balance", address: row.address }, 20_000)
+        .then((t: { usdc: number }) => {
+          tok.textContent = t.usdc > 0 ? `${t.usdc} USDC` : "no USDC";
+          if (t.usdc > 0) {
+            (document.getElementById("tk-addr") as HTMLInputElement).value = row.address;
+          }
+        })
+        .catch(() => {
+          tok.textContent = "";
+        });
       if (!row.spent) {
         const to = document.createElement("button");
         to.className = "text";
         to.type = "button";
         to.textContent = "Sweep";
         to.addEventListener("click", async () => {
-          const target = $("addr").textContent ?? "";
+          const target = destinationInput();
+          if (!target) return;
           const box = document.createElement("ul");
           box.className = "txs";
           li.append(box);
@@ -325,8 +574,11 @@ $("scan").addEventListener("click", async () => {
             }
             $("note").textContent = "sweeping…";
             const out = await ask({ type: "sweep", address: row.address, to: target });
-            $("note").textContent = `swept · ${out.hash.slice(0, 10)}…`;
-            $("scan").click();
+            // Same treatment as a payment: full hash plus a link.
+            const holder = document.createElement("div");
+            box.append(holder);
+            showReceipt(holder, { label: "Sweep sent.", hash: out.hash, net: out.net });
+            await paintBalance();
           } catch (err) {
             fail(err);
           }
@@ -336,8 +588,23 @@ $("scan").addEventListener("click", async () => {
       list.append(li);
     }
   } catch (err) {
+    window.clearInterval(ticker);
+    if (gen !== scanGen) return;
+    list.replaceChildren();
+    const li = document.createElement("li");
+    li.className = "tx";
+    li.textContent = err instanceof Error ? err.message : "The scan didn't finish.";
+    list.append(li);
     fail(err);
   }
+}
+
+$("scan").addEventListener("click", () => {
+  runScan(false);
+});
+
+$("scan-deep").addEventListener("click", () => {
+  runScan(true);
 });
 
 const dayStart = (v: string) => (v ? Math.floor(new Date(`${v}T00:00:00Z`).getTime() / 1000) : 0);
@@ -446,22 +713,125 @@ $("lock").addEventListener("click", async () => {
   show("unlock");
 });
 
+// Where a sweep goes. Asked once per sweep, because the answer should change:
+// reusing one address is exactly the link the guard exists to prevent.
+function destinationInput(): string {
+  const value = window.prompt(
+    "Send this payment to which address?\n\nDo not use your vault address. The guard will refuse it.",
+    "",
+  );
+  if (value === null) return "";
+  const trimmed = value.trim();
+  if (!/^0x[0-9a-fA-F]{40}$/.test(trimmed)) {
+    $("note").textContent = "That is not an address.";
+    return "";
+  }
+  return trimmed;
+}
+
+// Shows which network is carrying requests. Anonymised means the node cannot see
+// your IP; direct means it can, and says so.
+let transportMode = "nox";
+
+async function paintTransport() {
+  try {
+    const status = await ask({ type: "status" }, 15_000);
+    transportMode = status.mode ?? "nox";
+    const dot = $("mode-dot");
+    dot.classList.toggle("direct", transportMode === "direct");
+    $("mode-text").textContent =
+      transportMode === "direct"
+        ? "direct · the node sees your IP"
+        : `${status.label ?? transportMode} · the node sees the question, not you`;
+    const pick = $("net-pick") as HTMLSelectElement;
+    if (transportMode !== "direct") pick.value = transportMode;
+    if (status.note) $("note").textContent = status.note;
+  } catch {
+    $("mode-text").textContent = "network unknown";
+  }
+}
+
+$("net-pick").addEventListener("change", async () => {
+  const pick = $("net-pick") as HTMLSelectElement;
+  pick.disabled = true;
+  $("mode-text").textContent = `switching to ${pick.value}…`;
+  try {
+    const res = await ask({ type: "mode", net: pick.value }, 70_000);
+    $("mode-text").textContent = res.note ?? res.mode;
+    await paintTransport();
+    await paintBalance();
+  } catch (err) {
+    fail(err);
+    await paintTransport();
+  } finally {
+    pick.disabled = false;
+  }
+});
+
+/* ------------------------------------------------------------ token sweep */
+
+// USDC sweep. The point is that the stealth address never holds ETH: the key
+// signs an EIP-3009 authorisation offline and this wallet submits it and pays.
+$("tk-check").addEventListener("click", async () => {
+  const note = $("tk-note");
+  note.hidden = false;
+  note.textContent = "reading the USDC balance…";
+  try {
+    const res = await ask({ type: "token-balance", address: ($("tk-addr") as HTMLInputElement).value.trim() }, 30_000);
+    note.textContent = `${res.usdc} USDC at that address.`;
+  } catch (err) {
+    note.textContent = err instanceof Error ? err.message : "Could not read it.";
+  }
+});
+
+$("tk-sweep").addEventListener("click", async () => {
+  const note = $("tk-note");
+  note.hidden = false;
+  note.textContent = "sweeping USDC…";
+  const addr = ($("tk-addr") as HTMLInputElement).value.trim();
+  const to = ($("tk-to") as HTMLInputElement).value.trim();
+  try {
+    const bal = await ask({ type: "token-balance", address: addr }, 30_000);
+    if (!bal.raw || bal.raw === "0") throw new Error("No USDC at that address.");
+    const out = await ask({ type: "sweep-token", address: addr, to, raw: bal.raw }, 120_000);
+    note.replaceChildren(receiptNode({ label: "USDC swept. The stealth address never held ETH.", hash: out.hash, net: out.net }));
+  } catch (err) {
+    note.textContent = err instanceof Error ? err.message : "Sweep failed.";
+  }
+});
+
+/* ----------------------------------------------------------- guard demo */
+
+// Names the five rules and what each one is for, so the guard is inspectable
+// rather than a claim you have to take on trust.
+$("guard-demo").addEventListener("click", () => {
+  const list = $("guard-out");
+  list.replaceChildren();
+  const rules: [string, string, string][] = [
+    ["H1 destination reuse", "blocks", "Sweeping to a wallet you are known at ties every private payment to it."],
+    ["H2 round trip", "blocks", "Sweeping back to whoever paid you makes the payment circular."],
+    ["H3 collector pattern", "warns", "Draining several stealth addresses together shows one owner."],
+    ["H4 gas funding", "warns", "Sending ETH to a stealth address links it to the funder."],
+    ["H5 timing", "warns", "A sweep minutes after receipt is the strongest link there is."],
+  ];
+  for (const [rule, kind, why] of rules) {
+    const li = document.createElement("li");
+    li.className = kind === "blocks" ? "leak block" : "leak warn";
+    li.textContent = `${rule} · ${kind} — ${why}`;
+    list.append(li);
+  }
+});
+
 $("register").addEventListener("click", async () => {
   const note = $("reg-note");
   note.hidden = false;
   note.textContent = "publishing to the ERC-6538 registry…";
   try {
     const res = await ask({ type: "register" });
-    note.textContent = `registered · ${res.hash.slice(0, 10)}… · ${res.note}`;
+    note.replaceChildren(receiptNode({ label: "Meta-address registered.", hash: res.hash, net: res.net }));
   } catch (err) {
     note.textContent = err instanceof Error ? err.message : "Registration failed.";
   }
-});
-
-$("lock").addEventListener("click", async () => {
-  await ask({ type: "lock" });
-  ($("unlock-pw") as HTMLInputElement).value = "";
-  show("unlock");
 });
 
 /* ------------------------------------------------------------------ tabs */
@@ -683,6 +1053,8 @@ function rain() {
 
 rain();
 
+wireBalanceRetry();
+paintTransport().catch(() => {});
 boot().catch(fail);
 
 export {};
