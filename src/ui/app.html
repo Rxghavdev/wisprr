@@ -23,12 +23,27 @@
           <p class="addr" id="profile-addr"></p>
           <div id="qr"></div>
           <p class="quiet">Scan this address. The ENS name is read on mainnet through the mixnet, so the lookup does not leave from your IP.</p>
+          <button class="google" type="button">Continue with Google</button>
+          <p class="quiet">Google runs through Web3Auth. That login has its own address.</p>
         </section>
         <p class="tag" id="tag"></p>
         <p class="host" id="host" hidden></p>
 
         <section class="panel" data-screen="ask" hidden>
           <h2 data-type="Connect this site?"></h2>
+          <p class="quiet" id="ask-host"></p>
+          <section class="box receipt" id="receipt" hidden>
+            <h3>What this site will learn</h3>
+            <dl class="facts">
+              <div><dt>Worth</dt><dd id="rc-worth">…</dd></div>
+              <div><dt>ETH</dt><dd id="rc-eth">…</dd></div>
+              <div><dt>Transactions</dt><dd id="rc-txs">…</dd></div>
+              <div><dt>Token transfers</dt><dd id="rc-xfers">…</dd></div>
+              <div><dt>Looks like</dt><dd id="rc-known">…</dd></div>
+              <div><dt>Network</dt><dd id="rc-net">…</dd></div>
+            </dl>
+            <p class="quiet">Your address is public on chain. Connect shares it, plus everything above, with this site. It cannot sign or spend in this build.</p>
+          </section>
           <p class="quiet">A normal wallet would answer from your IP. This one asks through the mixnet.</p>
           <p class="quiet">The site still knows you opened the page.</p>
           <button id="allow" type="button">Connect</button>
@@ -41,12 +56,16 @@
           <label>Password <input id="pw" type="password" autocomplete="new-password" /></label>
           <label>Again <input id="pw2" type="password" autocomplete="new-password" /></label>
           <button id="create" type="button">Continue</button>
+          <button class="google" type="button">Continue with Google</button>
+          <p class="quiet">Google runs through Web3Auth. That login has its own address. The password still creates a separate wallet.</p>
           <button id="show-import" class="text" type="button">I already have a phrase</button>
         </section>
 
         <section class="panel" data-screen="words" hidden>
           <h2 data-type="Twelve words. Nowhere else."></h2>
           <ol class="words" id="words"></ol>
+          <button id="copy-words" class="text" type="button">Copy phrase</button>
+          <p class="quiet" id="copy-words-note"></p>
           <button id="keep" type="button">I've written them down</button>
         </section>
 
@@ -54,6 +73,8 @@
           <h2 data-type="Locked."></h2>
           <label>Password <input id="unlock-pw" type="password" autocomplete="current-password" /></label>
           <button id="unlock" type="button">Unlock</button>
+          <button class="google" type="button">Continue with Google</button>
+          <p class="quiet">Google runs through Web3Auth and opens that wallet.</p>
         </section>
 
         <section class="panel" data-screen="import" hidden>
@@ -71,25 +92,34 @@
           </div>
           <h2 id="net">Mainnet.</h2>
           <p class="addr" id="addr"></p>
+          <button id="copy-addr" class="text" type="button">Copy address</button>
           <p class="bal" id="bal"></p>
           <p class="quiet" id="ens"></p>
           <p class="quiet" id="note"></p>
 
           <section class="box">
             <h3>Uniswap</h3>
-            <p class="quiet">Price on the mainnet WETH/USDC 0.3% pool. The quoter call goes through the mixnet.</p>
-            <label>ETH <input id="quote-amt" inputmode="decimal" value="0.01" /></label>
-            <button id="quote" type="button">Get price</button>
-            <p class="quiet" id="quote-out"></p>
+            <p class="quiet">Live ETH price, 24h change, Ethereum volume, and TVL from Uniswap. Not a swap. The request goes out through the mixnet.</p>
+            <div class="stats">
+              <article class="stat"><p class="k">ETH</p><p class="v" id="stat-eth">…</p></article>
+              <article class="stat"><p class="k">24h</p><p class="v" id="stat-day">…</p></article>
+              <article class="stat"><p class="k">Volume</p><p class="v" id="stat-vol">…</p></article>
+              <article class="stat"><p class="k">TVL</p><p class="v" id="stat-tvl">…</p></article>
+            </div>
           </section>
 
-          <section class="box" id="send-box" hidden>
+          <section class="box" id="send-box">
             <h3>Send</h3>
-            <p class="quiet">Plain ETH on Sepolia. The signed transaction goes out through the mixnet.</p>
+            <p class="quiet">Sepolia only. Gas is estimated first, so a contract is not sent 21,000 gas. Mainnet does not send.</p>
             <label>To <input id="send-to" spellcheck="false" /></label>
             <label>ETH <input id="send-amt" inputmode="decimal" value="0.001" /></label>
             <button id="send" type="button">Send</button>
-            <p class="quiet" id="send-out"></p>
+          </section>
+
+          <section class="box">
+            <h3>Activity</h3>
+            <p class="quiet">Recent transfers on this network, read through the mixnet.</p>
+            <ul class="txs" id="txs"></ul>
           </section>
 
           <ul class="sites" id="sites" hidden></ul>

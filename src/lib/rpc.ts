@@ -55,6 +55,24 @@ export function bootMixnet(): Promise<void> {
   return pending;
 }
 
+export async function anonGet(url: string): Promise<unknown> {
+  await bootMixnet();
+  const res = await worker!.fetch(url);
+  if (!res.ok) throw new Error("History didn't load.");
+  return res.json();
+}
+
+export async function anonPost(url: string, body: unknown): Promise<unknown> {
+  await bootMixnet();
+  const res = await worker!.fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json", "connect-protocol-version": "1" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error("Uniswap didn't answer.");
+  return res.json();
+}
+
 export async function anonRequest(method: string, params: unknown[], url = MAINNET): Promise<unknown> {
   await bootMixnet();
   const res = await worker!.fetch(url, {

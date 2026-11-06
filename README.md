@@ -1,6 +1,6 @@
 # wisprr
 
-Ethereum wallet. Reads go out through Anon-RPC. A site can connect the way it connects any wallet. The home screen looks up the ENS name on mainnet through the mixnet, and prices ETH in USDC on the Uniswap v3 quoter. Sepolia can send a plain ETH transfer. Keys stay in the browser.
+Ethereum wallet. Reads go out through Anon-RPC. A site can connect the way it connects any wallet. The home screen looks up the ENS name on mainnet through the mixnet, and shows the ETH price, daily change, volume, and TVL from Uniswap. A plain ETH transfer sends on Sepolia. Keys stay in the browser.
 
 ```
 npm install

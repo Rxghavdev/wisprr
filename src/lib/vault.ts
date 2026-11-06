@@ -56,6 +56,10 @@ export async function open(password: string): Promise<string> {
   }
 }
 
+export async function openKey(privateKey: string): Promise<void> {
+  await chrome.storage.session.set({ [OPEN]: privateKey });
+}
+
 export async function lock(): Promise<void> {
   await chrome.storage.session.remove(OPEN);
 }

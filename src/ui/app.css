@@ -65,6 +65,108 @@ button.slim {
   font-size: 16px;
 }
 
+.stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.stat {
+  margin: 0;
+  padding: 12px 10px;
+  border: 1px solid var(--line);
+}
+
+.stat .k {
+  margin: 0 0 8px;
+  color: var(--dim);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.stat .v {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.txs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tx {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: start;
+  margin: 0;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+
+.tx p { margin: 0; }
+
+.tx .k {
+  margin-bottom: 6px;
+  color: var(--dim);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.tx .hash {
+  margin-top: 6px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.tx .note {
+  margin-top: 4px;
+  color: var(--dim);
+}
+
+.receipt .facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+  margin: 0 0 12px;
+}
+
+.receipt .facts div {
+  margin: 0;
+}
+
+.receipt dt {
+  margin: 0 0 4px;
+  color: var(--dim);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.receipt dd {
+  margin: 0;
+  font-size: 15px;
+}
+
+.sites li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+.sites button {
+  width: auto;
+  margin: 0;
+  padding: 6px 8px;
+}
+
 .nets {
   display: flex;
   gap: 8px;
@@ -208,6 +310,17 @@ button {
 button:hover { background: #000; color: var(--ink); }
 button:active { transform: translate(1px, 1px); }
 button:disabled { opacity: 0.4; cursor: progress; transform: none; }
+
+button.google {
+  background: #fff;
+  color: #111;
+  border-color: #fff;
+}
+
+button.google:hover {
+  background: #fff;
+  color: #111;
+}
 
 button.text {
   background: transparent;

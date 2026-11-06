@@ -63,7 +63,24 @@ function paintWords(mnemonic: string) {
     li.style.animationDelay = `${i * 40}ms`;
     list.append(li);
   });
+  const note = $("copy-words-note");
+  note.textContent = "";
 }
+
+$("copy-words").addEventListener("click", async () => {
+  const words = Array.from(document.querySelectorAll("#words li"))
+    .map((li) => li.textContent?.replace(/^\d+/, "").trim() ?? "")
+    .filter(Boolean)
+    .join(" ");
+  const note = $("copy-words-note");
+  if (!words) return;
+  try {
+    await navigator.clipboard.writeText(words);
+    note.textContent = "Copied. The clipboard is shared with every app on this machine. Move it somewhere safe and clear it.";
+  } catch {
+    note.textContent = "The browser blocked the clipboard. Select the words above and copy them by hand.";
+  }
+});
 
 function trimEth(eth: string) {
   const [whole, frac = ""] = eth.split(".");
@@ -74,12 +91,11 @@ async function paintHome(address: string) {
   $("addr").textContent = address;
   $("bal").textContent = "reading…";
   $("ens").textContent = "reading the name through the mixnet…";
-  $("quote-out").textContent = "";
   const net = await ask({ type: "net" });
   $("net").textContent = `${net.name}.`;
   ($("use-mainnet") as HTMLButtonElement).classList.toggle("on", net.name === "Mainnet");
   ($("use-sepolia") as HTMLButtonElement).classList.toggle("on", net.name === "Sepolia");
-  $("send-box").hidden = net.name !== "Sepolia";
+  ($("send") as HTMLButtonElement).disabled = net.name !== "Sepolia";
   $("note").textContent = "first call waits while the mixnet comes up.";
   paintSites().catch(() => {});
   show("home");
@@ -99,21 +115,102 @@ async function paintHome(address: string) {
   } catch {
     $("ens").textContent = "";
   }
+  paintMarket().catch(fail);
+  paintActivity().catch(() => {
+    $("txs").replaceChildren();
+    const li = document.createElement("li");
+    li.className = "tx";
+    li.textContent = "Activity didn't load.";
+    $("txs").append(li);
+  });
+}
+
+function shortHash(hash: string) {
+  return hash.length > 16 ? `${hash.slice(0, 8)}…${hash.slice(-6)}` : hash;
+}
+
+async function paintActivity() {
+  const list = $("txs");
+  list.replaceChildren();
+  const res = await ask({ type: "activity" });
+  const rows = (res.rows ?? []) as { hash: string; way: string; eth: string; status: string; note: string; when: string }[];
+  if (!rows.length) {
+    const li = document.createElement("li");
+    li.className = "tx";
+    li.textContent = "No transfers yet.";
+    list.append(li);
+    return;
+  }
+  for (const row of rows) {
+    const li = document.createElement("li");
+    li.className = "tx";
+    const body = document.createElement("div");
+    const k = document.createElement("p");
+    k.className = "k";
+    k.textContent = `${row.way} · ${row.status}${row.when ? ` · ${row.when}` : ""}`;
+    const v = document.createElement("p");
+    v.textContent = `${row.eth} ETH`;
+    const hash = document.createElement("p");
+    hash.className = "hash";
+    hash.textContent = shortHash(row.hash);
+    body.append(k, v, hash);
+    if (row.note) {
+      const note = document.createElement("p");
+      note.className = "note";
+      note.textContent = row.note;
+      body.append(note);
+    }
+    const copy = document.createElement("button");
+    copy.className = "slim";
+    copy.type = "button";
+    copy.textContent = "Copy";
+    copy.addEventListener("click", () => navigator.clipboard.writeText(row.hash).catch(fail));
+    li.append(body, copy);
+    list.append(li);
+  }
+}
+
+async function paintMarket() {
+  for (const id of ["stat-eth", "stat-day", "stat-vol", "stat-tvl"]) $(id).textContent = "…";
+  try {
+    const res = await ask({ type: "market" });
+    $("stat-eth").textContent = res.eth;
+    $("stat-day").textContent = res.day;
+    $("stat-vol").textContent = res.volume;
+    $("stat-tvl").textContent = res.tvl;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Uniswap didn't answer.";
+    $("stat-eth").textContent = "—";
+    $("stat-day").textContent = "—";
+    $("stat-vol").textContent = "—";
+    $("stat-tvl").textContent = "—";
+    fail(new Error(message));
+  }
 }
 
 async function paintSites() {
   const res = await ask({ type: "sites" });
   const list = $("sites");
-  const names = (res.hosts as string[]) ?? [];
+  const rows = (res.hosts as { host: string; origin: string }[]) ?? [];
   list.replaceChildren();
-  if (!names.length) {
+  if (!rows.length) {
     list.hidden = true;
     return;
   }
   list.hidden = false;
-  for (const name of names) {
+  for (const row of rows) {
     const li = document.createElement("li");
-    li.textContent = name;
+    const name = document.createElement("span");
+    name.textContent = row.host;
+    const out = document.createElement("button");
+    out.className = "text";
+    out.type = "button";
+    out.textContent = "Disconnect";
+    out.addEventListener("click", async () => {
+      await ask({ type: "revoke", origin: row.origin });
+      await paintSites();
+    });
+    li.append(name, out);
     list.append(li);
   }
 }
@@ -121,15 +218,64 @@ async function paintSites() {
 const port = chrome.runtime.connect({ name: "wisprr" });
 let promptId = "";
 
-async function showPrompt(info: { id: string; host: string; hasVault: boolean; unlocked: boolean; known: boolean }) {
+// Chrome stops an idle service worker after about thirty seconds, which would throw away
+// the site request waiting behind this panel. A ping every twenty seconds keeps it awake
+// while the panel is actually on screen.
+setInterval(() => {
+  if (!promptId) return;
+  try {
+    port.postMessage({ type: "ping" });
+  } catch {
+    /* the panel is going away */
+  }
+}, 20_000);
+
+type Receipt = {
+  net: string;
+  worth: string;
+  eth: string;
+  txs: string;
+  transfers: string;
+  known: string;
+};
+
+async function showPrompt(info: {
+  id: string;
+  host: string;
+  hasVault: boolean;
+  unlocked: boolean;
+  known: boolean;
+  address?: string;
+}) {
   promptId = info.id;
   const host = $("host");
   host.hidden = false;
   host.textContent = info.host;
+  $("ask-host").textContent = `${info.host} would get ${info.address || "your address"}.`;
   port.postMessage({ type: "watch", id: info.id });
   if (!info.hasVault) return show("create");
   if (!info.unlocked) return show("unlock");
   show("ask");
+  void paintReceipt();
+}
+
+async function paintReceipt() {
+  const box = $("receipt");
+  box.hidden = true;
+  let got: Receipt | undefined;
+  try {
+    got = (await ask({ type: "receipt" })) as Receipt;
+  } catch {
+    return;
+  }
+  if (!got || !promptId) return;
+  $("rc-worth").textContent = got.worth;
+  $("rc-eth").textContent = got.eth;
+  $("rc-txs").textContent = got.txs;
+  $("rc-xfers").textContent = got.transfers;
+  $("rc-known").textContent = got.known;
+  $("rc-net").textContent = got.net;
+  box.hidden = false;
 }
 
 async function afterAccount(address: string) {
@@ -154,6 +300,14 @@ async function boot() {
   if (status.unlocked) {
     await paintHome(status.address);
     return;
+  }
+  if (!status.hasVault) {
+    // A phrase may already be on screen from a panel that was closed before it was kept.
+    const drafted = await ask({ type: "drafted" });
+    if (drafted.mnemonic) {
+      paintWords(drafted.mnemonic);
+      return show("words");
+    }
   }
   show(status.hasVault ? "unlock" : "create");
 }
@@ -227,25 +381,12 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg?.type === "show-prompt") boot().catch(fail);
 });
 
-$("quote").addEventListener("click", async () => {
-  $("quote-out").textContent = "quoting…";
-  try {
-    const amount = ($("quote-amt") as HTMLInputElement).value;
-    const res = await ask({ type: "quote", amount });
-    $("quote-out").textContent = `${amount || "0"} ETH → ${res.usdc} USDC`;
-    $("note").textContent = res.note;
-  } catch (err) {
-    $("quote-out").textContent = "";
-    fail(err);
-  }
-});
-
 async function pickNet(name: string) {
   const res = await ask({ type: "set-net", net: name });
   $("net").textContent = `${res.name}.`;
   ($("use-mainnet") as HTMLButtonElement).classList.toggle("on", res.name === "Mainnet");
   ($("use-sepolia") as HTMLButtonElement).classList.toggle("on", res.name === "Sepolia");
-  $("send-box").hidden = res.name !== "Sepolia";
+  ($("send") as HTMLButtonElement).disabled = res.name !== "Sepolia";
   const status = await ask({ type: "status" });
   if (status.address) await paintHome(status.address);
 }
@@ -254,20 +395,66 @@ $("use-mainnet").addEventListener("click", () => pickNet("mainnet").catch(fail))
 $("use-sepolia").addEventListener("click", () => pickNet("sepolia").catch(fail));
 
 $("send").addEventListener("click", async () => {
-  $("send-out").textContent = "sending…";
+  $("note").textContent = "sending…";
   try {
     const res = await ask({
       type: "send",
       to: ($("send-to") as HTMLInputElement).value,
       amount: ($("send-amt") as HTMLInputElement).value,
     });
-    $("send-out").textContent = res.hash;
     $("note").textContent = res.note;
+    await paintActivity();
   } catch (err) {
-    $("send-out").textContent = "";
     fail(err);
   }
 });
+
+$("copy-addr").addEventListener("click", () => {
+  const address = $("addr").textContent || "";
+  if (address) navigator.clipboard.writeText(address).catch(fail);
+});
+
+// From the MetaMask Embedded Wallets dashboard. Project network: Sapphire Devnet.
+// Turn Google on, and whitelist chrome-extension://<this extension id>.
+const WEB3AUTH_CLIENT_ID = "";
+
+async function continueWithGoogle() {
+  if (!WEB3AUTH_CLIENT_ID) {
+    throw new Error(
+      `Add the Web3Auth client id in app.ts. On the dashboard, use Sapphire Devnet, turn Google on, and whitelist chrome-extension://${chrome.runtime.id}.`,
+    );
+  }
+  const { AUTH_CONNECTION, WALLET_CONNECTORS, WEB3AUTH_NETWORK, Web3Auth } = await import("@web3auth/modal");
+  const web3auth = new Web3Auth({
+    clientId: WEB3AUTH_CLIENT_ID,
+    web3AuthNetwork: WEB3AUTH_NETWORK.SAPPHIRE_DEVNET,
+    modalConfig: {
+      hideWalletDiscovery: true,
+      connectors: {
+        [WALLET_CONNECTORS.AUTH]: { label: "Google", showOnModal: true },
+        [WALLET_CONNECTORS.METAMASK]: { label: "MetaMask", showOnModal: false },
+        [WALLET_CONNECTORS.WALLET_CONNECT_V2]: { label: "WalletConnect", showOnModal: false },
+        [WALLET_CONNECTORS.COINBASE]: { label: "Coinbase", showOnModal: false },
+        [WALLET_CONNECTORS.BASE_ACCOUNT]: { label: "Base", showOnModal: false },
+      },
+    },
+  });
+  await web3auth.init();
+  await web3auth.connectTo(WALLET_CONNECTORS.AUTH, {
+    authConnection: AUTH_CONNECTION.GOOGLE,
+  });
+  const provider = web3auth.connection?.ethereumProvider;
+  if (!provider) throw new Error("Google sign-in was cancelled.");
+  const raw = await provider.request({ method: "private_key" });
+  if (typeof raw !== "string" || !raw) throw new Error("Web3Auth didn't return a key.");
+  const key = raw.startsWith("0x") ? raw : `0x${raw}`;
+  const res = await ask({ type: "social", key });
+  await afterAccount(res.address);
+}
+
+for (const button of Array.from(document.querySelectorAll<HTMLButtonElement>(".google"))) {
+  button.addEventListener("click", () => continueWithGoogle().catch(fail));
+}
 
 $("profile").addEventListener("click", async () => {
   const box = $("profile-box");

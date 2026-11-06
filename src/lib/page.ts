@@ -1,8 +1,8 @@
-import { mnemonicToAccount } from "viem/accounts";
+import { sessionAccount } from "./account";
 import { currentNet, netFromHex, netInfo, setNet } from "./chain";
-import { anonRequest } from "./rpc";
-import { allow, allowed } from "./sites";
-import { hasVault, sessionMnemonic } from "./vault";
+import { exposure, type Exposure } from "./exposure";import { anonRequest } from "./rpc";
+import { allow, allowed, origins } from "./sites";
+import { hasVault } from "./vault";
 
 export class RpcError extends Error {
   code: number;
@@ -54,26 +54,31 @@ function hostOf(origin: string) {
 }
 
 async function account() {
-  const mnemonic = await sessionMnemonic();
-  if (!mnemonic) return;
-  return mnemonicToAccount(mnemonic).address;
+  return (await sessionAccount())?.address;
 }
 
-function tell(msg: Record<string, unknown>) {
-  chrome.tabs.query({}, (tabs) => {
-    for (const tab of tabs) {
-      if (!tab.id) continue;
-      chrome.tabs.sendMessage(tab.id, msg, () => void chrome.runtime.lastError);
+async function tellConnected(msg: Record<string, unknown>) {
+  const want = new Set(await origins());
+  const tabs = await chrome.tabs.query({});
+  for (const tab of tabs) {
+    if (!tab.id || !tab.url) continue;
+    let origin = "";
+    try {
+      origin = new URL(tab.url).origin;
+    } catch {
+      continue;
     }
-  });
+    if (!want.has(origin)) continue;
+    chrome.tabs.sendMessage(tab.id, msg, () => void chrome.runtime.lastError);
+  }
 }
 
-export function publish(accounts: string[]) {
-  tell({ type: "accounts", accounts });
+export async function publish(accounts: string[]) {
+  await tellConnected({ type: "accounts", accounts });
 }
 
-export function publishChain(chainId: string) {
-  tell({ type: "chain", chainId });
+export async function publishChain(chainId: string) {
+  await tellConnected({ type: "chain", chainId });
 }
 
 export function pageOrigin(sender: chrome.runtime.MessageSender) {
@@ -102,7 +107,7 @@ export async function pageRequest(
 
   if (method === "eth_requestAccounts" || method === "wallet_requestPermissions") {
     const address = await ensure(origin, anchor);
-    publish([address]);
+    await publish([address]);
     if (method === "wallet_requestPermissions") return [{ parentCapability: "eth_accounts" }];
     return [address];
   }
@@ -111,8 +116,9 @@ export async function pageRequest(
     const chainId = (params?.[0] as { chainId?: string } | undefined)?.chainId ?? "";
     const next = netFromHex(chainId);
     if (!next) throw new RpcError(4902, "wisprr has mainnet and Sepolia.");
+    if (!(await allowed(origin))) throw new RpcError(4100, "Connect first.");
     await setNet(next);
-    publishChain(netInfo(next).hex);
+    await publishChain(netInfo(next).hex);
     return null;
   }
 
@@ -210,12 +216,22 @@ export function popupGone(id: string) {
 export async function describe(id: string) {
   const prompt = prompts.get(id);
   if (!prompt) throw new Error("This request is gone.");
+  const address = await account();
   return {
     host: prompt.host,
     known: prompt.known,
     hasVault: await hasVault(),
-    unlocked: Boolean(await account()),
+    unlocked: Boolean(address),
+    address: address ?? "",
   };
+}
+
+// What the site would see with this address. Read only when the prompt is open,
+// because it costs three round trips through the mixnet.
+export async function receipt() {
+  const address = await account();
+  if (!address) throw new Error("Locked.");
+  return exposure(address, await currentNet());
 }
 
 export async function allowPrompt(id: string) {
