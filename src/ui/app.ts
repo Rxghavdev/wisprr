@@ -1,3 +1,5 @@
+import { renderSVG } from "uqr";
+
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 
 const TAG = "the node sees the question, not you.";
@@ -29,7 +31,11 @@ function show(name: string) {
     void el.offsetWidth;
     el.classList.add("show");
     const head = el.querySelector("[data-type]") as HTMLElement | null;
-    if (head?.dataset.type) typeInto(head, head.dataset.type);
+    if (head?.id === "net") {
+      head.textContent = head.dataset.type || "";
+    } else if (head?.dataset.type) {
+      typeInto(head, head.dataset.type);
+    }
   }
   $("err").hidden = true;
 }
@@ -67,8 +73,13 @@ function trimEth(eth: string) {
 async function paintHome(address: string) {
   $("addr").textContent = address;
   $("bal").textContent = "reading…";
-  $("ens").textContent = "";
+  $("ens").textContent = "reading the name through the mixnet…";
   $("quote-out").textContent = "";
+  const net = await ask({ type: "net" });
+  $("net").textContent = `${net.name}.`;
+  ($("use-mainnet") as HTMLButtonElement).classList.toggle("on", net.name === "Mainnet");
+  ($("use-sepolia") as HTMLButtonElement).classList.toggle("on", net.name === "Sepolia");
+  $("send-box").hidden = net.name !== "Sepolia";
   $("note").textContent = "first call waits while the mixnet comes up.";
   paintSites().catch(() => {});
   show("home");
@@ -82,7 +93,9 @@ async function paintHome(address: string) {
   }
   try {
     const named = await ask({ type: "ens" });
-    $("ens").textContent = named.name || "no ENS name on this address";
+    $("ens").textContent = named.name
+      ? `${named.name} · mainnet, through the mixnet`
+      : "no ENS name on this address · looked up through the mixnet";
   } catch {
     $("ens").textContent = "";
   }
@@ -217,11 +230,57 @@ chrome.runtime.onMessage.addListener((msg) => {
 $("quote").addEventListener("click", async () => {
   $("quote-out").textContent = "quoting…";
   try {
-    const res = await ask({ type: "quote" });
-    $("quote-out").textContent = `0.01 ETH → ${res.usdc} USDC`;
+    const amount = ($("quote-amt") as HTMLInputElement).value;
+    const res = await ask({ type: "quote", amount });
+    $("quote-out").textContent = `${amount || "0"} ETH → ${res.usdc} USDC`;
     $("note").textContent = res.note;
   } catch (err) {
     $("quote-out").textContent = "";
+    fail(err);
+  }
+});
+
+async function pickNet(name: string) {
+  const res = await ask({ type: "set-net", net: name });
+  $("net").textContent = `${res.name}.`;
+  ($("use-mainnet") as HTMLButtonElement).classList.toggle("on", res.name === "Mainnet");
+  ($("use-sepolia") as HTMLButtonElement).classList.toggle("on", res.name === "Sepolia");
+  $("send-box").hidden = res.name !== "Sepolia";
+  const status = await ask({ type: "status" });
+  if (status.address) await paintHome(status.address);
+}
+
+$("use-mainnet").addEventListener("click", () => pickNet("mainnet").catch(fail));
+$("use-sepolia").addEventListener("click", () => pickNet("sepolia").catch(fail));
+
+$("send").addEventListener("click", async () => {
+  $("send-out").textContent = "sending…";
+  try {
+    const res = await ask({
+      type: "send",
+      to: ($("send-to") as HTMLInputElement).value,
+      amount: ($("send-amt") as HTMLInputElement).value,
+    });
+    $("send-out").textContent = res.hash;
+    $("note").textContent = res.note;
+  } catch (err) {
+    $("send-out").textContent = "";
+    fail(err);
+  }
+});
+
+$("profile").addEventListener("click", async () => {
+  const box = $("profile-box");
+  box.hidden = !box.hidden;
+  if (box.hidden) return;
+  try {
+    const status = await ask({ type: "status" });
+    const address = status.address || "";
+    $("profile-addr").textContent = address || "Unlock to see the address.";
+    $("qr").innerHTML = address
+      ? renderSVG(`ethereum:${address}`, { pixelSize: 4, blackColor: "#000", whiteColor: "#f4f4f4" })
+      : "";
+  } catch (err) {
     fail(err);
   }
 });

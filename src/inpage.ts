@@ -26,6 +26,9 @@ function emit(event: string, arg: unknown) {
 }
 
 function call(method: string, params?: unknown[]) {
+  if (method === "eth_requestAccounts" || method === "wallet_requestPermissions") {
+    document.dispatchEvent(new Event("wisprr-open"));
+  }
   const id = seq++;
   return new Promise((resolve, reject) => {
     pending.set(id, { resolve, reject });
@@ -53,6 +56,10 @@ window.addEventListener("message", (event) => {
   if (data.ch === "wisprr-event" && data.event === "accountsChanged" && Array.isArray(data.data)) {
     provider.selectedAddress = data.data[0] ?? null;
     emit("accountsChanged", data.data);
+  }
+  if (data.ch === "wisprr-event" && data.event === "chainChanged" && typeof data.data === "string") {
+    provider.chainId = data.data;
+    emit("chainChanged", data.data);
   }
 });
 

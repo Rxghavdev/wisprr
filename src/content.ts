@@ -1,3 +1,19 @@
+let openOnThisClick = false;
+
+document.addEventListener("wisprr-open", () => {
+  openOnThisClick = true;
+  queueMicrotask(() => {
+    openOnThisClick = false;
+  });
+});
+
+// The site's click is the user gesture. A made-up event from the page is not.
+document.addEventListener("click", () => {
+  if (!openOnThisClick) return;
+  openOnThisClick = false;
+  chrome.runtime.sendMessage({ type: "open-panel" });
+});
+
 window.addEventListener("message", (event) => {
   if (event.source !== window) return;
   const data = event.data;
@@ -13,8 +29,12 @@ window.addEventListener("message", (event) => {
 });
 
 chrome.runtime.onMessage.addListener((msg) => {
-  if (msg?.type !== "accounts" || !Array.isArray(msg.accounts)) return;
-  window.postMessage({ ch: "wisprr-event", event: "accountsChanged", data: msg.accounts }, "*");
+  if (msg?.type === "accounts" && Array.isArray(msg.accounts)) {
+    window.postMessage({ ch: "wisprr-event", event: "accountsChanged", data: msg.accounts }, "*");
+  }
+  if (msg?.type === "chain" && typeof msg.chainId === "string") {
+    window.postMessage({ ch: "wisprr-event", event: "chainChanged", data: msg.chainId }, "*");
+  }
 });
 
 export {};

@@ -44,6 +44,56 @@ html, body {
   margin-bottom: 4px;
 }
 
+.grow { flex: 1; }
+
+button.slim {
+  width: auto;
+  margin: 0;
+  padding: 8px 10px;
+  background: transparent;
+  color: var(--ink);
+}
+
+.box {
+  margin: 14px 0;
+  padding: 14px 12px 12px;
+  border: 1px solid var(--line);
+}
+
+.box h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+
+.nets {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+button.net {
+  width: auto;
+  flex: 1;
+  margin: 0;
+  background: transparent;
+  color: var(--dim);
+  border-color: var(--line);
+}
+
+button.net.on {
+  background: var(--ink);
+  color: #000;
+  border-color: var(--ink);
+}
+
+#qr {
+  width: 168px;
+  margin: 8px 0 10px;
+  background: #f4f4f4;
+}
+
+#qr svg { display: block; width: 168px; height: 168px; }
+
 .mark {
   width: 54px;
   height: 54px;

@@ -1,4 +1,4 @@
-import { formatEther } from "viem";
+import { formatEther, parseEther } from "viem";
 import { english, generateMnemonic, mnemonicToAccount } from "viem/accounts";
 import {
   allowPrompt,
@@ -8,11 +8,14 @@ import {
   pageRequest,
   pendingPrompt,
   popupGone,
+  publishChain,
   publish,
   RpcError,
 } from "./lib/page";
+import { currentNet, netInfo, setNet, type NetName } from "./lib/chain";
 import { ensName } from "./lib/ens";
 import { quoteEthToUsdc } from "./lib/quote";
+import { sendSepoliaEth } from "./lib/send";
 import { anonRequest, mixnetNote } from "./lib/rpc";
 import { hosts } from "./lib/sites";
 import { hasVault, lock, open, seal, sessionMnemonic } from "./lib/vault";
@@ -38,7 +41,17 @@ chrome.runtime.onConnect.addListener((port) => {
 });
 
 async function handle(
-  msg: { type?: string; password?: string; mnemonic?: string; method?: string; params?: unknown[]; id?: string },
+  msg: {
+    type?: string;
+    password?: string;
+    mnemonic?: string;
+    method?: string;
+    params?: unknown[];
+    id?: string;
+    amount?: string;
+    to?: string;
+    net?: string;
+  },
   sender: chrome.runtime.MessageSender,
 ) {
   if (msg.type === "status") {
@@ -89,7 +102,27 @@ async function handle(
     return { ok: true };
   }
 
+  if (msg.type === "open-panel") {
+    const windowId = sender.tab?.windowId;
+    if (windowId == null) return { ok: false };
+    await chrome.sidePanel.open({ windowId });
+    return { ok: true };
+  }
+
   if (msg.type === "sites") return { hosts: await hosts() };
+
+  if (msg.type === "net") {
+    const info = netInfo(await currentNet());
+    return { name: info.name, hex: info.hex };
+  }
+
+  if (msg.type === "set-net") {
+    const name: NetName = msg.net === "sepolia" ? "sepolia" : "mainnet";
+    await setNet(name);
+    const info = netInfo(name);
+    publishChain(info.hex);
+    return { name: info.name, hex: info.hex };
+  }
 
   if (msg.type === "pending") return pendingPrompt();
   if (msg.type === "prompt") return describe(msg.id ?? "");
@@ -118,7 +151,7 @@ async function handle(
     const mnemonic = await sessionMnemonic();
     if (!mnemonic) throw new Error("Locked.");
     const address = mnemonicToAccount(mnemonic).address;
-    const hex = (await anonRequest("eth_getBalance", [address, "latest"])) as string;
+    const hex = (await anonRequest("eth_getBalance", [address, "latest"], netInfo(await currentNet()).rpc)) as string;
     return { eth: formatEther(BigInt(hex)), note: mixnetNote() };
   }
 
@@ -132,7 +165,15 @@ async function handle(
   if (msg.type === "quote") {
     const mnemonic = await sessionMnemonic();
     if (!mnemonic) throw new Error("Locked.");
-    return { usdc: await quoteEthToUsdc(), note: mixnetNote() };
+    return { usdc: await quoteEthToUsdc(msg.amount || "0.01"), note: mixnetNote() };
+  }
+
+  if (msg.type === "send") {
+    const mnemonic = await sessionMnemonic();
+    if (!mnemonic) throw new Error("Locked.");
+    if ((await currentNet()) !== "sepolia") throw new Error("Switch to Sepolia before sending.");
+    const hash = await sendSepoliaEth(mnemonic, msg.to ?? "", parseEther((msg.amount || "").trim()));
+    return { hash, note: mixnetNote() };
   }
 
   throw new Error("unknown message");

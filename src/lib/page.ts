@@ -1,4 +1,5 @@
 import { mnemonicToAccount } from "viem/accounts";
+import { currentNet, netFromHex, netInfo, setNet } from "./chain";
 import { anonRequest } from "./rpc";
 import { allow, allowed } from "./sites";
 import { hasVault, sessionMnemonic } from "./vault";
@@ -58,13 +59,21 @@ async function account() {
   return mnemonicToAccount(mnemonic).address;
 }
 
-export function publish(accounts: string[]) {
+function tell(msg: Record<string, unknown>) {
   chrome.tabs.query({}, (tabs) => {
     for (const tab of tabs) {
       if (!tab.id) continue;
-      chrome.tabs.sendMessage(tab.id, { type: "accounts", accounts }, () => void chrome.runtime.lastError);
+      chrome.tabs.sendMessage(tab.id, msg, () => void chrome.runtime.lastError);
     }
   });
+}
+
+export function publish(accounts: string[]) {
+  tell({ type: "accounts", accounts });
+}
+
+export function publishChain(chainId: string) {
+  tell({ type: "chain", chainId });
 }
 
 export function pageOrigin(sender: chrome.runtime.MessageSender) {
@@ -81,8 +90,8 @@ export async function pageRequest(
   origin: string,
   anchor?: number,
 ) {
-  if (method === "eth_chainId") return "0x1";
-  if (method === "net_version") return "1";
+  if (method === "eth_chainId") return netInfo(await currentNet()).hex;
+  if (method === "net_version") return String(netInfo(await currentNet()).id);
   if (method === "web3_clientVersion") return "wisprr";
 
   if (method === "eth_accounts") {
@@ -99,11 +108,16 @@ export async function pageRequest(
   }
 
   if (method === "wallet_switchEthereumChain" || method === "wallet_addEthereumChain") {
-    const chainId = (params?.[0] as { chainId?: string } | undefined)?.chainId;
-    if (chainId && chainId.toLowerCase() !== "0x1") {
-      throw new RpcError(4902, "wisprr stays on Ethereum mainnet.");
-    }
+    const chainId = (params?.[0] as { chainId?: string } | undefined)?.chainId ?? "";
+    const next = netFromHex(chainId);
+    if (!next) throw new RpcError(4902, "wisprr has mainnet and Sepolia.");
+    await setNet(next);
+    publishChain(netInfo(next).hex);
     return null;
+  }
+
+  if (method === "eth_sendTransaction") {
+    throw new RpcError(4200, "Send from the Sepolia form in wisprr. A site cannot spend on its own.");
   }
 
   if (
@@ -118,7 +132,7 @@ export async function pageRequest(
   }
 
   if (!READ.has(method)) throw new RpcError(-32601, `${method} is not handled.`);
-  return anonRequest(method, params ?? []);
+  return anonRequest(method, params ?? [], netInfo(await currentNet()).rpc);
 }
 
 async function ensure(origin: string, anchor?: number) {

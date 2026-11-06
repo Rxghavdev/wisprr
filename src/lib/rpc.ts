@@ -55,9 +55,9 @@ export function bootMixnet(): Promise<void> {
   return pending;
 }
 
-export async function anonRequest(method: string, params: unknown[]): Promise<unknown> {
+export async function anonRequest(method: string, params: unknown[], url = MAINNET): Promise<unknown> {
   await bootMixnet();
-  const res = await worker!.fetch(MAINNET, {
+  const res = await worker!.fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: n++, method, params }),

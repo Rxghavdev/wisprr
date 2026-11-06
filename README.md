@@ -1,6 +1,6 @@
 # wisprr
 
-Ethereum mainnet wallet. Reads go out through Anon-RPC. A site can connect the way it connects any wallet. The home screen looks up the ENS name for the address, and can price 0.01 ETH in USDC on the Uniswap v3 quoter. Signing is not in this build yet. Keys stay in the browser.
+Ethereum wallet. Reads go out through Anon-RPC. A site can connect the way it connects any wallet. The home screen looks up the ENS name on mainnet through the mixnet, and prices ETH in USDC on the Uniswap v3 quoter. Sepolia can send a plain ETH transfer. Keys stay in the browser.
 
 ```
 npm install

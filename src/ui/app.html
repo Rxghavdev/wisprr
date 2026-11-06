@@ -13,11 +13,17 @@
       <div class="card">
         <div class="brand">
           <img class="mark" src="mark.svg" alt="" />
-          <div>
+          <div class="grow">
             <p class="where">Ethereum</p>
             <h1>wisprr</h1>
           </div>
+          <button id="profile" class="slim" type="button">Profile</button>
         </div>
+        <section id="profile-box" class="box" hidden>
+          <p class="addr" id="profile-addr"></p>
+          <div id="qr"></div>
+          <p class="quiet">Scan this address. The ENS name is read on mainnet through the mixnet, so the lookup does not leave from your IP.</p>
+        </section>
         <p class="tag" id="tag"></p>
         <p class="host" id="host" hidden></p>
 
@@ -59,13 +65,33 @@
         </section>
 
         <section class="panel" data-screen="home" hidden>
-          <h2 data-type="Mainnet."></h2>
+          <div class="nets">
+            <button id="use-mainnet" class="net on" type="button">Mainnet</button>
+            <button id="use-sepolia" class="net" type="button">Sepolia</button>
+          </div>
+          <h2 id="net">Mainnet.</h2>
           <p class="addr" id="addr"></p>
           <p class="bal" id="bal"></p>
           <p class="quiet" id="ens"></p>
           <p class="quiet" id="note"></p>
-          <button id="quote" type="button">Price 0.01 ETH</button>
-          <p class="quiet" id="quote-out"></p>
+
+          <section class="box">
+            <h3>Uniswap</h3>
+            <p class="quiet">Price on the mainnet WETH/USDC 0.3% pool. The quoter call goes through the mixnet.</p>
+            <label>ETH <input id="quote-amt" inputmode="decimal" value="0.01" /></label>
+            <button id="quote" type="button">Get price</button>
+            <p class="quiet" id="quote-out"></p>
+          </section>
+
+          <section class="box" id="send-box" hidden>
+            <h3>Send</h3>
+            <p class="quiet">Plain ETH on Sepolia. The signed transaction goes out through the mixnet.</p>
+            <label>To <input id="send-to" spellcheck="false" /></label>
+            <label>ETH <input id="send-amt" inputmode="decimal" value="0.001" /></label>
+            <button id="send" type="button">Send</button>
+            <p class="quiet" id="send-out"></p>
+          </section>
+
           <ul class="sites" id="sites" hidden></ul>
           <button id="lock" class="text" type="button">Lock</button>
         </section>

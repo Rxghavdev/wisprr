@@ -1,4 +1,4 @@
-import { decodeFunctionResult, encodeFunctionData, formatUnits } from "viem";
+import { decodeFunctionResult, encodeFunctionData, formatUnits, parseEther } from "viem";
 import { anonRequest } from "./rpc";
 
 // Quoter on Ethereum mainnet, from Uniswap v3-periphery deploys.md.
@@ -25,12 +25,14 @@ const quoterAbi = [
   },
 ] as const;
 
-// 0.01 WETH in, USDC out. The Quoter simulates the swap and returns the amount.
-export async function quoteEthToUsdc(): Promise<string> {
+// WETH in, USDC out. The Quoter simulates the swap and returns the amount.
+export async function quoteEthToUsdc(eth: string): Promise<string> {
+  const amountIn = parseEther(eth.trim() || "0");
+  if (amountIn <= 0n) throw new Error("Amount has to be more than zero.");
   const data = encodeFunctionData({
     abi: quoterAbi,
     functionName: "quoteExactInputSingle",
-    args: [WETH, USDC, 3000, 10n ** 16n, 0n],
+    args: [WETH, USDC, 3000, amountIn, 0n],
   });
   const hex = (await anonRequest("eth_call", [{ to: QUOTER, data }, "latest"])) as `0x${string}`;
   const amount = decodeFunctionResult({
