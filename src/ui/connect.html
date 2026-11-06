@@ -22,10 +22,29 @@
         <p class="host" id="host"></p>
 
         <section class="panel" data-screen="ask" hidden>
-          <h2 data-type="Connect this site?"></h2>
-          <p class="quiet">A normal wallet would answer from your IP. This one asks through the mixnet.</p>
-          <p class="quiet">The site still knows you opened the page.</p>
-          <button id="allow" type="button">Connect</button>
+          <h2 data-type="Which one does this site get?"></h2>
+          <p class="quiet" id="ask-what"></p>
+
+          <article class="face">
+            <header>
+              <p class="k">A face</p>
+              <span class="pill">new for this site</span>
+            </header>
+            <p class="addr" id="fc-addr">…</p>
+            <p class="quiet">No history, no name. Nothing about you.</p>
+            <button id="allow-face" type="button">Connect the face</button>
+          </article>
+
+          <article class="face dim">
+            <header>
+              <p class="k">Your vault</p>
+              <span class="pill warn">reveals everything</span>
+            </header>
+            <p class="addr" id="vc-addr">…</p>
+            <p class="quiet">The address every other site already knows.</p>
+            <button id="allow-vault" class="text" type="button">Connect the vault instead</button>
+          </article>
+
           <button id="deny" class="text" type="button">Cancel</button>
         </section>
 

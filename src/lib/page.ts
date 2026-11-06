@@ -1,6 +1,7 @@
+import { hexToString, isHex, type Hex } from "viem";
 import { sessionAccount } from "./account";
 import { currentNet, netFromHex, netInfo, setNet } from "./chain";
-import { exposure, type Exposure } from "./exposure";import { anonRequest } from "./rpc";
+import { anonRequest } from "./rpc";
 import { allow, allowed, origins } from "./sites";
 import { hasVault } from "./vault";
 
@@ -32,12 +33,13 @@ const READ = new Set([
   "eth_syncing",
 ]);
 
+const SIGN = new Set(["personal_sign", "eth_sign", "eth_signTypedData", "eth_signTypedData_v4"]);
+
 const PROMPT = "wisprr-prompt";
 
 type Prompt = {
   origin: string;
   host: string;
-  known: boolean;
   resolve: (address: string) => void;
   reject: (err: Error) => void;
 };
@@ -53,14 +55,9 @@ function hostOf(origin: string) {
   }
 }
 
-async function account() {
-  return (await sessionAccount())?.address;
-}
-
-async function tellConnected(msg: Record<string, unknown>) {
+export async function publish(accounts: string[]) {
   const want = new Set(await origins());
-  const tabs = await chrome.tabs.query({});
-  for (const tab of tabs) {
+  for (const tab of await chrome.tabs.query({})) {
     if (!tab.id || !tab.url) continue;
     let origin = "";
     try {
@@ -69,16 +66,23 @@ async function tellConnected(msg: Record<string, unknown>) {
       continue;
     }
     if (!want.has(origin)) continue;
-    chrome.tabs.sendMessage(tab.id, msg, () => void chrome.runtime.lastError);
+    chrome.tabs.sendMessage(tab.id, { type: "accounts", accounts }, () => void chrome.runtime.lastError);
   }
 }
 
-export async function publish(accounts: string[]) {
-  await tellConnected({ type: "accounts", accounts });
-}
-
 export async function publishChain(chainId: string) {
-  await tellConnected({ type: "chain", chainId });
+  const want = new Set(await origins());
+  for (const tab of await chrome.tabs.query({})) {
+    if (!tab.id || !tab.url) continue;
+    let origin = "";
+    try {
+      origin = new URL(tab.url).origin;
+    } catch {
+      continue;
+    }
+    if (!want.has(origin)) continue;
+    chrome.tabs.sendMessage(tab.id, { type: "chain", chainId }, () => void chrome.runtime.lastError);
+  }
 }
 
 export function pageOrigin(sender: chrome.runtime.MessageSender) {
@@ -89,20 +93,15 @@ export function pageOrigin(sender: chrome.runtime.MessageSender) {
   return "";
 }
 
-export async function pageRequest(
-  method: string,
-  params: unknown[] | undefined,
-  origin: string,
-  anchor?: number,
-) {
+export async function pageRequest(method: string, params: unknown[] | undefined, origin: string, anchor?: number) {
   if (method === "eth_chainId") return netInfo(await currentNet()).hex;
   if (method === "net_version") return String(netInfo(await currentNet()).id);
   if (method === "web3_clientVersion") return "wisprr";
 
   if (method === "eth_accounts") {
     if (!(await allowed(origin))) return [];
-    const address = await account();
-    return address ? [address] : [];
+    const account = await sessionAccount();
+    return account ? [account.address] : [];
   }
 
   if (method === "eth_requestAccounts" || method === "wallet_requestPermissions") {
@@ -122,33 +121,56 @@ export async function pageRequest(
     return null;
   }
 
-  if (method === "eth_sendTransaction") {
-    throw new RpcError(4200, "Send from the Sepolia form in wisprr. A site cannot spend on its own.");
+  // A site never spends. Every transaction is signed inside the wallet, where the
+  // user can see what it does.
+  if (method === "eth_sendTransaction" || method === "eth_sendRawTransaction") {
+    throw new RpcError(4200, "A site cannot spend. Send from the wisprr panel.");
   }
 
-  if (
-    method === "personal_sign" ||
-    method === "eth_sign" ||
-    method === "eth_signTypedData" ||
-    method === "eth_signTypedData_v4" ||
-    method === "eth_sendTransaction" ||
-    method === "eth_sendRawTransaction"
-  ) {
-    throw new RpcError(4200, "Signing comes next. This build connects and reads.");
+  if (SIGN.has(method)) {
+    if (!(await allowed(origin))) throw new RpcError(4100, "Connect first.");
+    const account = await sessionAccount();
+    if (!account) throw new RpcError(4100, "Locked.");
+    if (method === "personal_sign") {
+      const first = params?.[0];
+      if (typeof first !== "string") throw new RpcError(-32602, "Nothing to sign.");
+      const message = isHex(first) ? hexToString(first as Hex) : first;
+      return account.signMessage({ message });
+    }
+    if (method === "eth_sign") {
+      const raw = params?.[1];
+      if (typeof raw !== "string" || !isHex(raw) || raw.length !== 66) {
+        throw new RpcError(-32602, "eth_sign needs a 32-byte hash.");
+      }
+      return account.signMessage({ message: { raw: raw as Hex } });
+    }
+    const raw = params?.[1];
+    const typed = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (!typed || typeof typed !== "object") throw new RpcError(-32602, "That typed data is empty.");
+    const data = typed as {
+      domain?: unknown;
+      types?: Record<string, unknown>;
+      message?: unknown;
+      primaryType?: string;
+    };
+    if (!data.types || !data.message || !data.primaryType) throw new RpcError(-32602, "That typed data is incomplete.");
+    delete data.types.EIP712Domain;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return account.signTypedData(data as any);
   }
 
   if (!READ.has(method)) throw new RpcError(-32601, `${method} is not handled.`);
-  return anonRequest(method, params ?? [], netInfo(await currentNet()).rpc);
+  return anonRequest(method, params ?? [], netInfo(await currentNet()).rpc, "site");
 }
 
 async function ensure(origin: string, anchor?: number) {
   const known = await allowed(origin);
-  const address = await account();
-  if (known && address) return address;
-  return enqueue(origin, known, anchor);
+  const account = await sessionAccount();
+  if (known && account) return account.address;
+  return enqueue(origin, anchor);
 }
 
-function enqueue(origin: string, known: boolean, anchor?: number) {
+function enqueue(origin: string, anchor?: number) {
   const prev = gate;
   let release: () => void = () => {};
   gate = new Promise<void>((resolve) => {
@@ -156,16 +178,16 @@ function enqueue(origin: string, known: boolean, anchor?: number) {
   });
   return prev
     .then(
-      () => openPrompt(origin, known, anchor),
-      () => openPrompt(origin, known, anchor),
+      () => openPrompt(origin, anchor),
+      () => openPrompt(origin, anchor),
     )
     .finally(release);
 }
 
-function openPrompt(origin: string, known: boolean, anchor?: number) {
+function openPrompt(origin: string, anchor?: number) {
   const id = crypto.randomUUID();
   return new Promise<string>((resolve, reject) => {
-    const prompt: Prompt = { origin, host: hostOf(origin), known, resolve, reject };
+    const prompt: Prompt = { origin, host: hostOf(origin), resolve, reject };
     prompts.set(id, prompt);
     arm(id)
       .then(async () => {
@@ -174,7 +196,7 @@ function openPrompt(origin: string, known: boolean, anchor?: number) {
         try {
           await chrome.sidePanel.open({ windowId });
         } catch {
-          /* Chrome only opens the panel from a user gesture. The badge stays. Click the icon. */
+          /* Chrome only opens the panel from a user gesture. The badge stays. */
         }
         chrome.runtime.sendMessage({ type: "show-prompt" }).catch(() => {});
       })
@@ -216,33 +238,25 @@ export function popupGone(id: string) {
 export async function describe(id: string) {
   const prompt = prompts.get(id);
   if (!prompt) throw new Error("This request is gone.");
-  const address = await account();
+  const address = (await sessionAccount())?.address;
   return {
     host: prompt.host,
-    known: prompt.known,
     hasVault: await hasVault(),
     unlocked: Boolean(address),
     address: address ?? "",
   };
 }
 
-// What the site would see with this address. Read only when the prompt is open,
-// because it costs three round trips through the mixnet.
-export async function receipt() {
-  const address = await account();
-  if (!address) throw new Error("Locked.");
-  return exposure(address, await currentNet());
-}
-
 export async function allowPrompt(id: string) {
   const prompt = prompts.get(id);
   if (!prompt) throw new Error("This request is gone.");
-  const address = await account();
-  if (!address) throw new Error("Locked.");
+  const account = await sessionAccount();
+  if (!account) throw new Error("Locked.");
   await allow(prompt.origin);
   prompts.delete(id);
-  prompt.resolve(address);
+  prompt.resolve(account.address);
   await disarm();
+  return { address: account.address };
 }
 
 export function denyPrompt(id: string) {

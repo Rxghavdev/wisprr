@@ -6,7 +6,8 @@
   "license": "MIT",
   "scripts": {
     "build": "node build.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "esbuild test/run.ts --bundle --platform=node --format=esm --outfile=test/run.mjs --log-level=error && node test/run.mjs"
   },
   "dependencies": {
     "@anon-rpc/browser-extension-harness": "0.4.0",

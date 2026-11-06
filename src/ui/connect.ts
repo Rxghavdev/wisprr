@@ -42,17 +42,43 @@ async function ask(msg: Record<string, unknown>) {
   return res;
 }
 
+function short(address: string) {
+  return address.length > 14 ? `${address.slice(0, 6)}…${address.slice(-4)}` : address;
+}
+
+async function paintReceipt() {
+  try {
+    const got = await ask({ type: "receipt", id });
+    $("fc-addr").textContent = short(got.face.address);
+    $("vc-addr").textContent = short(got.vault.address);
+    $("ask-what").textContent = `${got.vault.host} asked for an address.`;
+  } catch {
+    $("fc-addr").textContent = "derived on connect";
+  }
+}
+
 async function load() {
   const info = await ask({ type: "prompt", id });
   $("host").textContent = info.host;
   if (!info.hasVault) return show("empty");
   if (!info.unlocked) return show("locked");
+  $("ask-what").textContent = `${info.host} asked for an address.`;
   show("ask");
+  void paintReceipt();
 }
 
-$("allow").addEventListener("click", async () => {
+$("allow-face").addEventListener("click", async () => {
   try {
-    await ask({ type: "allow", id });
+    await ask({ type: "allow", id, mode: "face" });
+    window.close();
+  } catch (err) {
+    fail(err);
+  }
+});
+
+$("allow-vault").addEventListener("click", async () => {
+  try {
+    await ask({ type: "allow", id, mode: "vault" });
     window.close();
   } catch (err) {
     fail(err);
@@ -76,11 +102,12 @@ $("unlock").addEventListener("click", async () => {
     await ask({ type: "unlock", password: ($("pw") as HTMLInputElement).value });
     const info = await ask({ type: "prompt", id });
     if (info.known) {
-      await ask({ type: "allow", id });
+      await ask({ type: "allow", id, mode: "face" });
       window.close();
       return;
     }
     show("ask");
+    void paintReceipt();
   } catch (err) {
     fail(err);
   }
@@ -103,6 +130,11 @@ let nowY = 0;
 addEventListener("mousemove", (event) => {
   aimX = event.clientX;
   aimY = event.clientY;
+  const hit = document.elementFromPoint(event.clientX, event.clientY);
+  document.body.classList.toggle(
+    "pointing",
+    Boolean(hit?.closest("button, a, summary, input, textarea")),
+  );
 });
 const chase = () => {
   nowX += (aimX - nowX) * 0.22;

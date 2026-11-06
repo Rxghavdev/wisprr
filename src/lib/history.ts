@@ -42,8 +42,8 @@ function eth(wei?: string) {
   }
 }
 
-export async function recentTxs(address: string, net: NetName): Promise<TxRow[]> {
-  const body = (await anonGet(`${host(net)}/api/v2/addresses/${address}/transactions`)) as { items?: Item[] };
+export async function recentTxs(address: string, net: NetName, key?: string): Promise<TxRow[]> {
+  const body = (await anonGet(`${host(net)}/api/v2/addresses/${address}/transactions`, key)) as { items?: Item[] };
   const mine = address.toLowerCase();
   return (body.items ?? []).slice(0, 8).map((item) => {
     const from = item.from?.hash?.toLowerCase() ?? "";

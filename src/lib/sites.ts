@@ -41,5 +41,7 @@ export async function origins(): Promise<string[]> {
 }
 
 export async function hosts(): Promise<{ host: string; origin: string; at: number }[]> {
-  return (await list()).map((row) => ({ host: hostOf(row.origin), origin: row.origin, at: row.at }));
+  return (await list())
+    .map((row) => ({ host: hostOf(row.origin), origin: row.origin, at: row.at }))
+    .sort((a, b) => b.at - a.at);
 }

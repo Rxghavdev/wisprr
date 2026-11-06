@@ -1,4 +1,4 @@
-import { formatEther, parseEther } from "viem";
+import { formatEther, parseEther, encodeFunctionData, keccak256, toHex, type Hex } from "viem";
 import { english, generateMnemonic, mnemonicToAccount } from "viem/accounts";
 import {
   allowPrompt,
@@ -8,9 +8,8 @@ import {
   pageRequest,
   pendingPrompt,
   popupGone,
-  publishChain,
-  receipt,
   publish,
+  publishChain,
   RpcError,
 } from "./lib/page";
 import { accountFromSecret, sessionAccount } from "./lib/account";
@@ -24,6 +23,14 @@ import { anonRequest, mixnetNote } from "./lib/rpc";
 import { hosts, revoke } from "./lib/sites";
 import { clearDraft, readDraft, writeDraft } from "./lib/draft";
 import { hasVault, lock, open, openKey, seal, sessionMnemonic } from "./lib/vault";
+import { keysFromSecret, metaAddress, parseMeta, REGISTRY, REGISTRY_ABI, auditGrant, auditView } from "./lib/stealth";
+import { scan, scanWith, scanScoped } from "./lib/payments";
+import { ANNOUNCER } from "./lib/stealth";
+import { sendPrivate, sweep, sendCall } from "./lib/private";
+import { authoriseToken, submit3009, USDC } from "./lib/token3009";
+import { makeGrant, recordGrant, grants, revokeGrant, scopedRecogniser, check, type Grant } from "./lib/grants";
+import { inspect } from "./lib/guard";
+import type { Found } from "./lib/payments";
 
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
 
@@ -37,12 +44,76 @@ chrome.runtime.onConnect.addListener((port) => {
   let watching = "";
   port.onMessage.addListener((msg) => {
     if (msg?.type === "watch" && typeof msg.id === "string") watching = msg.id;
-    // A ping is only here to keep this worker alive while a panel is asking for a site.
   });
   port.onDisconnect.addListener(() => {
     if (watching) popupGone(watching);
   });
 });
+
+async function keys() {
+  const secret = await sessionMnemonic();
+  if (!secret) throw new Error("Locked.");
+  return keysFromSecret(secret);
+}
+
+// The event signature our scanner filters on, needed when we ask specifically
+// "did this address announce a payment to us?".
+const TOPIC = keccak256(toHex("Announcement(uint256,address,address,bytes,bytes)"));
+
+async function balanceOf(address: string, net: NetName, key: string) {
+  const hex = (await anonRequest("eth_getBalance", [address, "latest"], netInfo(net).rpc, key)) as string;
+  return formatEther(BigInt(hex));
+}
+
+// Does `to` appear as the announcement caller for this payment? If so they paid
+// us, and sweeping back to them closes the loop.
+async function payerSeenInLogs(net: NetName, to: string, found: Found): Promise<boolean> {
+  try {
+    const rows = (await anonRequest(
+      "eth_getLogs",
+      [
+        {
+          address: ANNOUNCER,
+          topics: [TOPIC, null, found.address, `0x${to.slice(2).padStart(64, "0")}`],
+          fromBlock: toHex(found.block),
+          toBlock: toHex(found.block),
+        },
+      ],
+      netInfo(net).rpc,
+      "scan",
+    )) as unknown[];
+    return Array.isArray(rows) && rows.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function blockTime(net: NetName, block: bigint): Promise<number> {
+  try {
+    const blk = (await anonRequest("eth_getBlockByNumber", [toHex(block), false], netInfo(net).rpc, "scan")) as {
+      timestamp?: string;
+    };
+    return blk?.timestamp ? Number(BigInt(blk.timestamp)) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+// Builds the context the guard needs. The two hard refusals (H1, H2) are decided
+// from chain data, not from what the user typed.
+async function guardSweep(net: NetName, found: Found, to: string, rows: Found[]) {
+  const account = await sessionAccount();
+  const vault = (account?.address ?? "").toLowerCase();
+  const destinationIsOwnVault = Boolean(vault) && to.toLowerCase() === vault;
+  const destinationPaidUs = await payerSeenInLogs(net, to, found);
+  const eth = await balanceOf(found.address, net, "scan").catch(() => "0");
+  const seconds = Math.max(0, Math.floor(Date.now() / 1000) - (await blockTime(net, found.block)));
+  return inspect(
+    { to: to as `0x${string}`, payment: found, others: rows, destinationIsOwnVault, destinationPaidUs },
+    eth,
+    seconds,
+  );
+}
 
 async function handle(
   msg: {
@@ -57,6 +128,16 @@ async function handle(
     net?: string;
     key?: string;
     origin?: string;
+    meta?: string;
+    address?: string;
+    full?: boolean;
+    viewing?: string;
+    spendingPub?: string;
+    raw?: string;
+    purpose?: string;
+    windowFrom?: number;
+    windowTo?: number;
+    hash?: string;
   },
   sender: chrome.runtime.MessageSender,
 ) {
@@ -76,7 +157,6 @@ async function handle(
     "set-net",
     "pending",
     "prompt",
-    "receipt",
     "allow",
     "deny",
     "balance",
@@ -85,6 +165,20 @@ async function handle(
     "quote",
     "send",
     "activity",
+    "receive",
+    "scan",
+    "register",
+    "lookup",
+    "audit-key",
+    "audit-scan",
+    "grant",
+    "grants",
+    "revoke-grant",
+    "pay",
+    "sweep",
+    "sweep-check",
+    "token-balance",
+    "sweep-token",
   ]);
   if (panelOnly.has(msg.type ?? "") && !fromPanel) throw new Error("That request has to come from the wallet.");
 
@@ -96,7 +190,6 @@ async function handle(
   if (msg.type === "social") {
     const key = (msg.key ?? "").trim();
     if (!/^0x[0-9a-fA-F]{64}$/.test(key)) throw new Error("Web3Auth didn't return a key.");
-    accountFromSecret(key);
     await openKey(key);
     return { address: accountFromSecret(key).address };
   }
@@ -141,6 +234,7 @@ async function handle(
 
   if (msg.type === "unlock") {
     const mnemonic = await open(msg.password ?? "");
+    await publish([mnemonicToAccount(mnemonic).address]);
     return { address: mnemonicToAccount(mnemonic).address };
   }
 
@@ -162,7 +256,6 @@ async function handle(
   if (msg.type === "revoke") {
     await revoke(msg.origin ?? "");
     await publish([]);
-    await publishChain(netInfo(await currentNet()).hex);
     return { hosts: await hosts() };
   }
 
@@ -181,11 +274,7 @@ async function handle(
 
   if (msg.type === "pending") return pendingPrompt();
   if (msg.type === "prompt") return describe(msg.id ?? "");
-  if (msg.type === "receipt") return receipt();
-  if (msg.type === "allow") {
-    await allowPrompt(msg.id ?? "");
-    return { ok: true };
-  }
+  if (msg.type === "allow") return allowPrompt(msg.id ?? "");
   if (msg.type === "deny") {
     denyPrompt(msg.id ?? "");
     return { ok: true };
@@ -206,8 +295,7 @@ async function handle(
   if (msg.type === "balance") {
     const account = await sessionAccount();
     if (!account) throw new Error("Locked.");
-    const address = account.address;
-    const hex = (await anonRequest("eth_getBalance", [address, "latest"], netInfo(await currentNet()).rpc)) as string;
+    const hex = (await anonRequest("eth_getBalance", [account.address, "latest"], netInfo(await currentNet()).rpc, "vault")) as string;
     return { eth: formatEther(BigInt(hex)), note: mixnetNote() };
   }
 
@@ -218,14 +306,12 @@ async function handle(
   }
 
   if (msg.type === "market") {
-    const account = await sessionAccount();
-    if (!account) throw new Error("Locked.");
+    if (!(await sessionAccount())) throw new Error("Locked.");
     return uniswapCards();
   }
 
   if (msg.type === "quote") {
-    const account = await sessionAccount();
-    if (!account) throw new Error("Locked.");
+    if (!(await sessionAccount())) throw new Error("Locked.");
     return { usdc: await quoteEthToUsdc(msg.amount || "0.01"), note: mixnetNote() };
   }
 
@@ -233,15 +319,222 @@ async function handle(
     const secret = await sessionMnemonic();
     if (!secret) throw new Error("Locked.");
     if ((await currentNet()) !== "sepolia") throw new Error("Switch to Sepolia before sending.");
-    const hash = await sendSepoliaEth(secret, msg.to ?? "", parseEther((msg.amount || "").trim()));
+    const hash = await sendSepoliaEth(secret, msg.to ?? "", parseEther((msg.amount || "").trim()), "vault");
     return { hash, note: mixnetNote() };
   }
 
   if (msg.type === "activity") {
     const account = await sessionAccount();
     if (!account) throw new Error("Locked.");
+    return { rows: await recentTxs(account.address, await currentNet(), "vault") };
+  }
+
+  // Your meta-address. Public keys only, so it can be posted anywhere.
+  if (msg.type === "receive") {
+    const k = await keys();
+    return { meta: metaAddress(k), note: mixnetNote() };
+  }
+
+  if (msg.type === "scan") {
+    const k = await keys();
     const net = await currentNet();
-    return { rows: await recentTxs(account.address, net) };
+    const rows = await scan(k, net, Boolean(msg.full));
+    return {
+      rows: rows.map((r) => ({
+        address: r.address,
+        txHash: r.txHash,
+        block: r.block.toString(),
+        eth: r.eth,
+        spent: r.spent,
+        ephemeralPubKey: r.ephemeralPubKey,
+        viewTag: r.viewTag,
+      })),
+      note: mixnetNote(),
+    };
+  }
+
+  // Pay someone at their meta-address. The value and the announcement both go out
+  // through the mixnet, so no node has both the payment and this IP.
+  if (msg.type === "pay") {
+    const secret = await sessionMnemonic();
+    if (!secret) throw new Error("Locked.");
+    const meta = (msg.meta ?? "").trim();
+    parseMeta(meta);
+    const value = parseEther((msg.amount || "").trim() || "0");
+    const net = await currentNet();
+    const res = await sendPrivate(secret, meta, value, "vault", net);
+    return { ...res, note: mixnetNote() };
+  }
+
+  // Token balance of a stealth address, so the UI can offer a token sweep.
+  if (msg.type === "token-balance") {
+    const net = await currentNet();
+    const address = (msg.address ?? "") as `0x${string}`;
+    if (!/^0x[0-9a-fA-F]{40}$/.test(address)) throw new Error("Bad address.");
+    const data = encodeFunctionData({
+      abi: [
+        {
+          type: "function",
+          name: "balanceOf",
+          stateMutability: "view",
+          inputs: [{ name: "account", type: "address" }],
+          outputs: [{ name: "", type: "uint256" }],
+        },
+      ] as const,
+      functionName: "balanceOf",
+      args: [address],
+    });
+    const ret = (await anonRequest("eth_call", [{ to: USDC[net], data }, "latest"], netInfo(net).rpc, "scan")) as Hex;
+    return { raw: BigInt(ret || "0x0").toString(), usdc: Number(BigInt(ret || "0x0")) / 1e6 };
+  }
+
+  // Sweep USDC out of a stealth address without it ever holding gas. The stealth
+  // key signs an EIP-3009 authorisation offline; this wallet submits it and pays
+  // the fee. No ETH is sent to the stealth address, so no funding edge is created.
+  if (msg.type === "sweep-token") {
+    const secret = await sessionMnemonic();
+    if (!secret) throw new Error("Locked.");
+    const k = await keys();
+    const net = await currentNet();
+    const address = msg.address ?? "";
+    const rows = await scan(k, net);
+    const found = rows.find((r) => r.address.toLowerCase() === address.toLowerCase());
+    if (!found) throw new Error("That payment is not in this wallet.");
+    const to = (msg.to ?? "") as `0x${string}`;
+    if (!/^0x[0-9a-fA-F]{40}$/.test(to)) throw new Error("Sweep to a valid address.");
+
+    // The guard runs before signing, not after.
+    const verdict = await guardSweep(net, found, to, rows);
+    const stops = verdict.filter((l) => l.severity === "block");
+    if (stops.length) throw new Error(stops.map((l) => `${l.rule}: ${l.why} ${l.instead}`).join(" "));
+
+    const value = BigInt(msg.raw ?? "0");
+    if (value <= 0n) throw new Error("Nothing to sweep.");
+    const auth = await authoriseToken(k, found, to, value, net);
+    const hash = await submit3009(secret, auth, net);
+    return { hash, note: mixnetNote() };
+  }
+
+  // What the guard would say, without sending anything. The UI shows this before
+  // the user commits, so a refusal is never a surprise.
+  if (msg.type === "sweep-check") {
+    const k = await keys();
+    const net = await currentNet();
+    const rows = await scan(k, net);
+    const found = rows.find((r) => r.address.toLowerCase() === (msg.address ?? "").toLowerCase());
+    if (!found) throw new Error("That payment is not in this wallet.");
+    const leaks = await guardSweep(net, found, (msg.to ?? "") as `0x${string}`, rows);
+    return {
+      leaks: leaks.map((l) => ({ rule: l.rule, severity: l.severity, why: l.why, instead: l.instead })),
+      // ok means nothing will stop the signature. Warnings are surfaced but do not
+      // block, which is the difference between advice and a refusal.
+      ok: leaks.filter((l) => l.severity === "block").length === 0,
+      blocked: leaks.filter((l) => l.severity === "block").length,
+    };
+  }
+
+  if (msg.type === "sweep") {
+    const k = await keys();
+    const net = await currentNet();
+    const address = msg.address ?? "";
+    const rows = await scan(k, net);
+    const found = rows.find((r) => r.address.toLowerCase() === address.toLowerCase());
+    if (!found) throw new Error("That payment is not in this wallet.");
+    const to = (msg.to ?? "") as `0x${string}`;
+    if (!/^0x[0-9a-fA-F]{40}$/.test(to)) throw new Error("Sweep to a valid address.");
+
+    // The guard runs on the signing path itself, not only in the UI. A caller that
+    // skips the pre-check still cannot publish a link.
+    const verdict = await guardSweep(net, found, to, rows);
+    const stops = verdict.filter((l) => l.severity === "block");
+    if (stops.length) {
+      throw new Error(stops.map((l) => `${l.rule}: ${l.why} ${l.instead}`).join(" "));
+    }
+
+    const hash = await sweep(k, found, to, net);
+    return { hash, note: mixnetNote(), warnings: verdict.map((l) => l.rule) };
+  }
+
+  // Registration in the ERC-6538 registry. An address registers the meta-address
+  // it wants to be paid at; payers look it up instead of being told out of band.
+  if (msg.type === "register") {
+    const secret = await sessionMnemonic();
+    if (!secret) throw new Error("Locked.");
+    const k = keysFromSecret(secret);
+    const meta = metaAddress(k);
+    const data = encodeFunctionData({
+      abi: REGISTRY_ABI,
+      functionName: "registerKeys",
+      // The registry stores the meta-address without the "st:eth:" prefix.
+      args: [1n, `0x${parseMeta(meta).spending.length ? meta.replace(/^st:eth:0x/, "0x") : ""}` as `0x${string}`],
+    });
+    const net = await currentNet();
+    const hash = await sendCall(secret, { to: REGISTRY as `0x${string}`, data }, net);
+    return { hash, meta, note: mixnetNote() };
+  }
+
+  // Look someone up in the registry instead of asking them for their meta-address.
+  if (msg.type === "lookup") {
+    const who = (msg.address ?? "").trim();
+    if (!/^0x[0-9a-fA-F]{40}$/.test(who)) throw new Error("That is not an address.");
+    const net = await currentNet();
+    const data = encodeFunctionData({
+      abi: REGISTRY_ABI,
+      functionName: "stealthMetaAddressOf",
+      args: [who as `0x${string}`, 1n],
+    });
+    const ret = (await anonRequest("eth_call", [{ to: REGISTRY, data }, "latest"], netInfo(net).rpc, "lookup")) as Hex;
+    if (!ret || ret === "0x") throw new Error("That address has not registered a meta-address.");
+    return { meta: `st:eth:${ret}`, note: mixnetNote() };
+  }
+
+  // Selective disclosure: what you hand an auditor. Viewing scalar plus the
+  // spending public key. Identifies every payment, cannot move any of them.
+  if (msg.type === "audit-key") {
+    const k = await keys();
+    const grant = auditGrant(k);
+    return { ...grant, note: mixnetNote() };
+  }
+
+  // A scoped grant: named grantee, stated purpose, bounded window, logged hash.
+  if (msg.type === "grant") {
+    const k = await keys();
+    const g = makeGrant(k, msg.meta ?? "", msg.purpose ?? "", Number(msg.windowFrom ?? 0), Number(msg.windowTo ?? 0));
+    const record = await recordGrant(g);
+    return { grant: record, hash: record.hash, note: mixnetNote() };
+  }
+
+  if (msg.type === "grants") {
+    return { rows: await grants() };
+  }
+
+  if (msg.type === "revoke-grant") {
+    await revokeGrant(msg.hash ?? "");
+    return { rows: await grants() };
+  }
+
+  // The auditor's side: paste a grant, see only what it permits. Anything outside
+  // the window is never recognised, so it cannot appear here at all.
+  if (msg.type === "audit-scan") {
+    const g: Grant = {
+      grantee: msg.meta ?? "",
+      purpose: "",
+      from: Number(msg.windowFrom ?? 0),
+      to: Number(msg.windowTo ?? 0),
+      viewing: (msg.viewing ?? "") as Hex,
+      spendingPub: (msg.spendingPub ?? "") as Hex,
+      issuedAt: 0,
+    };
+    if (!/^0x[0-9a-fA-F]{64}$/.test(g.viewing)) throw new Error("That viewing key looks wrong.");
+    if (!/^0x[0-9a-fA-F]{66}$/.test(g.spendingPub)) throw new Error("That spending public key looks wrong.");
+    const verdict = check(g, g.from);
+    const net = await currentNet();
+    const rows = await scanScoped((eph, tag, when) => scopedRecogniser(g, when)(eph, tag), net, { from: g.from, to: g.to });
+    return {
+      rows: rows.map((r) => ({ address: r.address, eth: r.eth, block: r.block.toString() })),
+      allowed: verdict.allowed,
+      note: mixnetNote(),
+    };
   }
 
   throw new Error("unknown message");

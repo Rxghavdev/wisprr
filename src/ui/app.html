@@ -8,61 +8,39 @@
     <link rel="stylesheet" href="app.css" />
   </head>
   <body>
+    <canvas id="rain" aria-hidden="true"></canvas>
     <div id="dot" aria-hidden="true"></div>
+
     <main class="stage">
       <div class="card">
         <div class="brand">
-          <img class="mark" src="mark.svg" alt="" />
           <div class="grow">
             <p class="where">Ethereum</p>
             <h1>wisprr</h1>
           </div>
-          <button id="profile" class="slim" type="button">Profile</button>
+          <span class="badge" id="lock-badge" hidden>locked</span>
         </div>
-        <section id="profile-box" class="box" hidden>
-          <p class="addr" id="profile-addr"></p>
-          <div id="qr"></div>
-          <p class="quiet">Scan this address. The ENS name is read on mainnet through the mixnet, so the lookup does not leave from your IP.</p>
-          <button class="google" type="button">Continue with Google</button>
-          <p class="quiet">Google runs through Web3Auth. That login has its own address.</p>
-        </section>
-        <p class="tag" id="tag"></p>
-        <p class="host" id="host" hidden></p>
 
         <section class="panel" data-screen="ask" hidden>
-          <h2 data-type="Connect this site?"></h2>
-          <p class="quiet" id="ask-host"></p>
-          <section class="box receipt" id="receipt" hidden>
-            <h3>What this site will learn</h3>
-            <dl class="facts">
-              <div><dt>Worth</dt><dd id="rc-worth">…</dd></div>
-              <div><dt>ETH</dt><dd id="rc-eth">…</dd></div>
-              <div><dt>Transactions</dt><dd id="rc-txs">…</dd></div>
-              <div><dt>Token transfers</dt><dd id="rc-xfers">…</dd></div>
-              <div><dt>Looks like</dt><dd id="rc-known">…</dd></div>
-              <div><dt>Network</dt><dd id="rc-net">…</dd></div>
-            </dl>
-            <p class="quiet">Your address is public on chain. Connect shares it, plus everything above, with this site. It cannot sign or spend in this build.</p>
-          </section>
-          <p class="quiet">A normal wallet would answer from your IP. This one asks through the mixnet.</p>
-          <p class="quiet">The site still knows you opened the page.</p>
+          <h2>Connect this site?</h2>
+          <p class="host" id="ask-host"></p>
+          <p class="quiet">It will get your address, and can read your balance. It cannot move funds.</p>
           <button id="allow" type="button">Connect</button>
           <button id="deny" class="text" type="button">Cancel</button>
         </section>
 
-        <section class="panel" data-screen="create">
-          <h2 data-type="A password for this browser."></h2>
-          <p class="quiet">The recovery phrase shows up next. Write it down before you continue.</p>
+        <section class="panel" data-screen="create" hidden>
+          <h2>A password for this browser.</h2>
+          <p class="quiet">The recovery phrase shows up next.</p>
           <label>Password <input id="pw" type="password" autocomplete="new-password" /></label>
           <label>Again <input id="pw2" type="password" autocomplete="new-password" /></label>
           <button id="create" type="button">Continue</button>
-          <button class="google" type="button">Continue with Google</button>
-          <p class="quiet">Google runs through Web3Auth. That login has its own address. The password still creates a separate wallet.</p>
           <button id="show-import" class="text" type="button">I already have a phrase</button>
         </section>
 
         <section class="panel" data-screen="words" hidden>
-          <h2 data-type="Twelve words. Nowhere else."></h2>
+          <h2>Twelve words. Nowhere else.</h2>
+          <p class="quiet">These words also restore every private payment anyone ever sent you.</p>
           <ol class="words" id="words"></ol>
           <button id="copy-words" class="text" type="button">Copy phrase</button>
           <p class="quiet" id="copy-words-note"></p>
@@ -70,60 +48,104 @@
         </section>
 
         <section class="panel" data-screen="unlock" hidden>
-          <h2 data-type="Locked."></h2>
+          <h2>Locked.</h2>
           <label>Password <input id="unlock-pw" type="password" autocomplete="current-password" /></label>
           <button id="unlock" type="button">Unlock</button>
-          <button class="google" type="button">Continue with Google</button>
-          <p class="quiet">Google runs through Web3Auth and opens that wallet.</p>
         </section>
 
         <section class="panel" data-screen="import" hidden>
-          <h2 data-type="Bring a phrase in."></h2>
+          <h2>Bring a phrase in.</h2>
           <label>Phrase <textarea id="phrase" rows="3" spellcheck="false"></textarea></label>
           <label>New password <input id="import-pw" type="password" autocomplete="new-password" /></label>
           <button id="import" type="button">Import</button>
           <button id="back" class="text" type="button">Back</button>
         </section>
 
-        <section class="panel" data-screen="home" hidden>
+        <section class="panel home" data-screen="home" hidden>
+          <div class="hero">
+            <p class="hero-bal" id="bal">…</p>
+            <p class="addr" id="addr"></p>
+            <p class="quiet note" id="note"></p>
+          </div>
+
           <div class="nets">
             <button id="use-mainnet" class="net on" type="button">Mainnet</button>
             <button id="use-sepolia" class="net" type="button">Sepolia</button>
           </div>
-          <h2 id="net">Mainnet.</h2>
-          <p class="addr" id="addr"></p>
-          <button id="copy-addr" class="text" type="button">Copy address</button>
-          <p class="bal" id="bal"></p>
-          <p class="quiet" id="ens"></p>
-          <p class="quiet" id="note"></p>
 
-          <section class="box">
-            <h3>Uniswap</h3>
-            <p class="quiet">Live ETH price, 24h change, Ethereum volume, and TVL from Uniswap. Not a swap. The request goes out through the mixnet.</p>
-            <div class="stats">
-              <article class="stat"><p class="k">ETH</p><p class="v" id="stat-eth">…</p></article>
-              <article class="stat"><p class="k">24h</p><p class="v" id="stat-day">…</p></article>
-              <article class="stat"><p class="k">Volume</p><p class="v" id="stat-vol">…</p></article>
-              <article class="stat"><p class="k">TVL</p><p class="v" id="stat-tvl">…</p></article>
+          <nav class="tabs" role="tablist">
+            <button class="tab on" data-tab="receive" type="button">Receive</button>
+            <button class="tab" data-tab="send" type="button">Send</button>
+            <button class="tab" data-tab="audit" type="button">Audit</button>
+            <button class="tab" data-tab="activity" type="button">Activity</button>
+          </nav>
+
+          <div class="tab-body show" data-body="receive">
+            <p class="lede">Hand this out instead of your address. Every payment lands somewhere new, and nobody can link two of them to you.</p>
+            <div class="field-row">
+              <code class="meta" id="meta"></code>
             </div>
-          </section>
+            <div class="actions">
+              <button id="copy-meta" class="ghost" type="button">Copy meta-address</button>
+              <button id="register" class="ghost" type="button">Publish to registry</button>
+            </div>
+            <p class="quiet" id="reg-note" hidden></p>
 
-          <section class="box" id="send-box">
-            <h3>Send</h3>
-            <p class="quiet">Sepolia only. Gas is estimated first, so a contract is not sent 21,000 gas. Mainnet does not send.</p>
-            <label>To <input id="send-to" spellcheck="false" /></label>
-            <label>ETH <input id="send-amt" inputmode="decimal" value="0.001" /></label>
-            <button id="send" type="button">Send</button>
-          </section>
+            <hr class="rule" />
 
-          <section class="box">
-            <h3>Activity</h3>
-            <p class="quiet">Recent transfers on this network, read through the mixnet.</p>
+            <p class="lede">Payments that arrived for you.</p>
+            <button id="scan" class="ghost" type="button">Scan for payments</button>
+            <ul class="txs" id="found"></ul>
+          </div>
+
+          <div class="tab-body" data-body="send" hidden>
+            <p class="lede">Paste someone's meta-address. The money goes to a one-time address and is announced, so only they can find it.</p>
+            <label>Meta-address <input id="pay-meta" spellcheck="false" placeholder="st:eth:0x…" /></label>
+            <label>ETH <input id="pay-amt" inputmode="decimal" value="0.001" /></label>
+            <button id="pay" type="button">Send privately</button>
+          </div>
+
+          <div class="tab-body" data-body="audit" hidden>
+            <p class="lede">Give an auditor a key for a named purpose and a date range. They see payments inside it, nothing outside, and they cannot move a thing.</p>
+            <label>Grantee <input id="g-who" placeholder="Deloitte AG" /></label>
+            <label>Purpose <input id="g-why" placeholder="Q3 2026 flows" /></label>
+            <div class="split">
+              <label>From <input id="g-from" type="date" /></label>
+              <label>To <input id="g-to" type="date" /></label>
+            </div>
+            <button id="g-make" type="button">Issue grant</button>
+            <code class="meta" id="g-out" hidden></code>
+            <ul class="txs" id="g-list"></ul>
+
+            <hr class="rule" />
+
+            <details>
+              <summary>Auditor view</summary>
+              <div class="details-body">
+                <label>Grant hash <input id="a-hash" spellcheck="false" placeholder="0x…" /></label>
+                <label>Viewing key <input id="a-view" spellcheck="false" placeholder="0x…" /></label>
+                <label>Spending public key <input id="a-spend" spellcheck="false" placeholder="0x…" /></label>
+                <div class="split">
+                  <label>From <input id="a-from" type="date" /></label>
+                  <label>To <input id="a-to" type="date" /></label>
+                </div>
+                <button id="a-scan" class="ghost" type="button">Scan inside this mandate</button>
+                <ul class="txs" id="a-found"></ul>
+              </div>
+            </details>
+          </div>
+
+          <div class="tab-body" data-body="activity" hidden>
+            <p class="lede">Recent transfers on this wallet, read through the mixnet.</p>
             <ul class="txs" id="txs"></ul>
-          </section>
 
-          <ul class="sites" id="sites" hidden></ul>
-          <button id="lock" class="text" type="button">Lock</button>
+            <hr class="rule" />
+
+            <p class="lede">Sites that can see your address.</p>
+            <ul class="sites" id="sites"></ul>
+          </div>
+
+          <button id="lock" class="text lock-btn" type="button">Lock wallet</button>
         </section>
 
         <p class="err" id="err" hidden></p>

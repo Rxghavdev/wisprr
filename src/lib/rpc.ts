@@ -26,6 +26,13 @@ export function mixnetNote(): string {
   return note;
 }
 
+// §9.3: calls under different isolation keys are asked not to be linkable to one
+// another. Best effort by the spec's own wording, but it is the only lever a
+// harness has, so every read carries the identity it was made for.
+function opts(isolationKey?: string) {
+  return isolationKey ? { isolationKey } : undefined;
+}
+
 // The specifier read uses BOOTSTRAP in the open. The harness docs say that one call is not anonymous.
 export function bootMixnet(): Promise<void> {
   if (worker) return Promise.resolve();
@@ -55,30 +62,37 @@ export function bootMixnet(): Promise<void> {
   return pending;
 }
 
-export async function anonGet(url: string): Promise<unknown> {
+export async function anonGet(url: string, key?: string): Promise<unknown> {
   await bootMixnet();
-  const res = await worker!.fetch(url);
-  if (!res.ok) throw new Error("History didn't load.");
+  const res = await worker!.fetch(url, { anonOptions: opts(key) });
+  if (!res.ok) throw new Error("That lookup didn't load.");
   return res.json();
 }
 
-export async function anonPost(url: string, body: unknown): Promise<unknown> {
+export async function anonPost(url: string, body: unknown, key?: string): Promise<unknown> {
   await bootMixnet();
   const res = await worker!.fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json", "connect-protocol-version": "1" },
     body: JSON.stringify(body),
+    anonOptions: opts(key),
   });
-  if (!res.ok) throw new Error("Uniswap didn't answer.");
+  if (!res.ok) throw new Error("That service didn't answer.");
   return res.json();
 }
 
-export async function anonRequest(method: string, params: unknown[], url = MAINNET): Promise<unknown> {
+export async function anonRequest(
+  method: string,
+  params: unknown[],
+  url = MAINNET,
+  key?: string,
+): Promise<unknown> {
   await bootMixnet();
   const res = await worker!.fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: n++, method, params }),
+    anonOptions: opts(key),
   });
   const body = (await res.json()) as { result?: unknown; error?: { message?: string } };
   if (body.error) throw new Error(body.error.message || "rpc error");

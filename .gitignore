@@ -4,4 +4,6 @@ dist
 .DS_Store
 anon-rpc-demo-extension
 dist/unpacked
+# test bundle output
+test/run.mjs
 

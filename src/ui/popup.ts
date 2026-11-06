@@ -36,6 +36,11 @@ let nowY = 0;
 addEventListener("mousemove", (event) => {
   aimX = event.clientX;
   aimY = event.clientY;
+  const hit = document.elementFromPoint(event.clientX, event.clientY);
+  document.body.classList.toggle(
+    "pointing",
+    Boolean(hit?.closest("button, a, summary, input, textarea")),
+  );
 });
 const chase = () => {
   nowX += (aimX - nowX) * 0.28;
