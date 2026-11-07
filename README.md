@@ -38,7 +38,7 @@ npm install
 npm run build
 npm test
 ```
-Download the extension zip isprr-extension.zip `https://github.com/Rxghavdev/wisprr/releases/tag/v0.1.0 w`
+Download the extension zip wisprr-extension.zip [Download Wisprr v0.1.0](https://github.com/Rxghavdev/wisprr/releases/tag/v0.1.0)
 
 `chrome://extensions` → Developer mode → **Load unpacked** → select after extracting `wisprr-extension`.
 Click the icon; the wallet opens in the side panel.
