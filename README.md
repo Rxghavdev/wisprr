@@ -38,8 +38,9 @@ npm install
 npm run build
 npm test
 ```
+Download the extension zip isprr-extension.zip `https://github.com/Rxghavdev/wisprr/releases/tag/v0.1.0 w`
 
-`chrome://extensions` → Developer mode → **Load unpacked** → select `dist/unpacked`.
+`chrome://extensions` → Developer mode → **Load unpacked** → select after extracting `wisprr-extension`.
 Click the icon; the wallet opens in the side panel.
 
 `npm test` runs **67 assertions** covering the stealth maths, interoperability against
