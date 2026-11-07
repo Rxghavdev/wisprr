@@ -241,7 +241,7 @@ for an unfunded test account.
 
 ### 6. ENSv2: the name layer for private payments
 
-`src/lib/ens.ts`, `scripts/`
+`src/lib/ens.ts`
 
 A 66-byte meta-address is unusable as an identifier. Nobody types
 `st:eth:0x0266f8…` into a chat window. ENSv2 turns it into something a person can
