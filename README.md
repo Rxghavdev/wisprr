@@ -31,6 +31,25 @@ someone can pay you by typing it instead of pasting a 141-character string.
 Each piece is useful alone. Together they are the only combination where a person can
 be paid repeatedly, by name, without anyone being able to total what they earn.
 
+## Run it
+
+```sh
+npm install
+npm run build
+npm test
+```
+
+`chrome://extensions` → Developer mode → **Load unpacked** → select `dist/unpacked`.
+Click the icon; the wallet opens in the side panel.
+
+`npm test` runs **67 assertions** covering the stealth maths, interoperability against
+ScopeLift's reference SDK, the leak guard, the disclosure windows, ENSv2 encoding and
+address checksums. It runs without a browser. `TESTING.md` covers the parts that need
+a real Chrome.
+
+To try it you need Sepolia ETH from any faucet. The wallet ships on Sepolia for demo
+purposes; switch the network toggle to Mainnet for real use.
+
 ---
 
 ## The problem, in one example
@@ -116,8 +135,6 @@ mixnet.
 ---
 
 ## How the pieces fit
-
-Six integrations. Two carry the prizes, four make them usable.
 
 ### 1. Anon-RPC: the transport for everything
 
@@ -287,8 +304,6 @@ tells your RPC provider which name you were interested in. Here it doesn't.
 
 ## How the two pillars reinforce each other
 
-The prizes are separate; the design is not.
-
 ```
    ENSv2 name  ──resolved through the mixnet──►  meta-address
                                                         │
@@ -316,22 +331,6 @@ are in the same wallet rather than two separate demos.
 
 ---
 
-## Try it
-
-```sh
-npm install
-npm run build
-npm test
-```
-
-Then `chrome://extensions` → Developer mode → **Load unpacked** → `dist/unpacked`.
-Click the icon, and the wallet opens in the side panel.
-
-`npm test` runs **67 assertions** covering the stealth maths, interop against the
-reference SDK, the guard rules, the grant windows, the ENSv2 encoding, and address
-checksums. It runs without a browser. `TESTING.md` has the manual steps for the UI
-and the mixnet.
-
 ### A demo that works
 
 1. **Receive** shows your meta-address. Use the copy button, not text selection.
@@ -346,6 +345,29 @@ and the mixnet.
 The ENS step is worth showing on its own: the name resolves to a meta-address, not
 to an address. That is what makes it payable repeatedly without a static address
 appearing anywhere.
+
+Live reference: `wisprr.eth` on Sepolia publishes a
+`stealth-meta-address[1]` record, checkable at
+[sepolia.app.ens.domains](https://sepolia.app.ens.domains).
+
+---
+
+## How this was built
+
+Built at ETHGlobal Mumbai 2026 with Cursor as a pair-programming assistant.
+
+**Human:** architecture, threat model, product decisions, which standards to use and
+which to leave out, every on-chain verification, every test run, the demo design.
+
+**AI:** code generation and refactoring across `src/lib/*.ts` and `src/ui/*.ts`,
+README drafting, and contract research for ENSv2 and anon-rpc. Files most affected:
+`stealth.ts`, `guard.ts`, `grants.ts`, `rpc.ts`, `token3009.ts`, `ens.ts`, `app.ts`.
+
+Every cryptographic claim in this README was verified by running code against live
+Sepolia or against ScopeLift's reference SDK, not by reading the specification. The
+interoperability bug in `stealth.ts` was found by that cross-check: the shared secret
+was hashed differently from the reference implementation, producing addresses no
+other wallet could open. The test suite now asserts interop in both directions.
 
 ---
 
