@@ -357,21 +357,6 @@ Live reference: `wisprr.eth` on Sepolia publishes a
 
 Built at ETHGlobal Mumbai 2026 with Cursor as a pair-programming assistant.
 
-**Human:** architecture, threat model, product decisions, which standards to use and
-which to leave out, every on-chain verification, every test run, the demo design.
-
-**AI:** code generation and refactoring across `src/lib/*.ts` and `src/ui/*.ts`,
-README drafting, and contract research for ENSv2 and anon-rpc. Files most affected:
-`stealth.ts`, `guard.ts`, `grants.ts`, `rpc.ts`, `token3009.ts`, `ens.ts`, `app.ts`.
-
-Every cryptographic claim in this README was verified by running code against live
-Sepolia or against ScopeLift's reference SDK, not by reading the specification. The
-interoperability bug in `stealth.ts` was found by that cross-check: the shared secret
-was hashed differently from the reference implementation, producing addresses no
-other wallet could open. The test suite now asserts interop in both directions.
-
----
-
 ## CROPS
 
 The Ethereum Foundation asks for one or two lines per letter.
