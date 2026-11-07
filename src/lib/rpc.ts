@@ -29,7 +29,7 @@ const SPECS: Record<Exclude<Net, "direct">, Spec> = {
   nox: {
     address: "0x35133267A8F7EC35046a83DCA0f4Ca8A6e1b7A9A",
     label: "Nox mixnet",
-    budget: 25_000,
+    budget: 12_000,
   },
   // tor-js: a demonstration gateway, so it may disappear. The docs say to run your
   // own for anything real, which is why it is not the default.
@@ -37,13 +37,13 @@ const SPECS: Record<Exclude<Net, "direct">, Spec> = {
     address: "0x700dA3193D35fA54Cd3fBf29B66f2a2A0385659e",
     label: "Tor",
     config: { gateways: ["152.236.3.22:12298:uEiCH0VdbhryzJcMtCfB0vLA4sOvHdQ4hq5w7CopcwU59bQ"] },
-    budget: 40_000,
+    budget: 15_000,
   },
   // Nym: the largest bundle and the slowest boot. Verified live on mainnet.
   nym: {
     address: "0x3aCD9742C68F6d993066Ae25533e09b9e1f60eD0",
     label: "Nym mixnet",
-    budget: 60_000,
+    budget: 20_000,
   },
 };
 
@@ -58,7 +58,7 @@ let net: Net = "nox";
 let note = "starting";
 let n = 1;
 
-const REQUEST_TIMEOUT = 25_000;
+const REQUEST_TIMEOUT = 12_000;
 
 export function mixnetNote(): string {
   return note;
@@ -256,29 +256,13 @@ export async function anonRequest(
       return body.result;
     });
   } catch (err) {
-    // A JSON-RPC error is a real answer. Only a broken tunnel is worth retrying,
-    // and it is tried on the next network before falling all the way to direct.
+    // A JSON-RPC error is a real answer; only a broken tunnel is retried.
     if (!isTransport(err)) throw err;
-    const next = ORDER.filter((x) => x !== net);
-    for (const candidate of next) {
-      try {
-        await chooseNet(candidate);
-        return await viaNet(async (w) => {
-          const res = await w.fetch(url, {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify(payload),
-            anonOptions: opts(key),
-          });
-          const body = (await res.json()) as { result?: unknown; error?: { message?: string } };
-          if (body.error) throw new Error(body.error.message || "rpc error");
-          return body.result;
-        });
-      } catch (nextErr) {
-        if (!isTransport(nextErr)) throw nextErr;
-      }
-    }
-    degrade("no anonymising network answered");
+
+    // Do NOT boot the other networks here. Each boot can take 40-60 seconds, and
+    // trying them all inside one request made a simple ENS lookup appear to hang.
+    // The boot path (chooseNet) already cascades; a request just drops to direct.
+    degrade("the network dropped a request");
     return plainPost(url, method, params);
   }
 }

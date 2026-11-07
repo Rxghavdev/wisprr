@@ -118,8 +118,15 @@ function sharedOf(myPriv: Uint8Array, theirPub: Uint8Array): Uint8Array {
   return kb(secp256k1.getSharedSecret(myPriv, theirPub, true));
 }
 
-function mask(s: Uint8Array, spendingPub: Uint8Array): bigint {
-  return reduce(toBig(kb(concatBytes(new Uint8Array([0xff]), s, spendingPub))));
+// h = keccak256(sharedSecret), reduced mod n. This is what the reference
+// implementation does (ScopeLift's stealth-address-sdk, generateStealthAddress.js).
+//
+// An earlier version of this file hashed 0xff || sharedSecret || spendingPub
+// instead. That produces a valid stealth address, but not one any other
+// implementation can recover, so it silently broke interoperability. Verified
+// against the SDK: the plain keccak matches, the prefixed form does not.
+function mask(s: Uint8Array): bigint {
+  return reduce(toBig(s));
 }
 
 function concatBytes(...parts: Uint8Array[]): Uint8Array {
@@ -142,7 +149,7 @@ export function derivePayment(meta: string): Payment {
   const r = secp256k1.utils.randomSecretKey();
   const ephemeralPubKey = secp256k1.getPublicKey(r, true);
   const s = sharedOf(r, pub.viewing);
-  const h = mask(s, pub.spending);
+  const h = mask(s);
   const stealth = Point.fromHex(hexOf(pub.spending).slice(2)).add(Point.BASE.multiply(h));
   return { stealthAddress: addressOf(stealth), ephemeralPubKey: hexOf(ephemeralPubKey), viewTag: s[0] };
 }
@@ -159,7 +166,7 @@ export function openPayment(keys: Keys, ephemeralPubKey: Hex, viewTag: number): 
     const pub = publicKeys(keys);
     const s = sharedOf(keys.viewing, bytesOf(ephemeralPubKey));
     if (s[0] !== viewTag) return;
-    const stealthPriv = to32((toBig(keys.spending) + mask(s, pub.spending)) % ORDER);
+    const stealthPriv = to32((toBig(keys.spending) + mask(s)) % ORDER);
     return hexOf(stealthPriv);
   } catch {
     return;
@@ -223,7 +230,7 @@ export function auditView(grant: AuditGrant, ephemeralPubKey: Hex, viewTag: numb
     if (!/^0x[0-9a-fA-F]{66}$/.test(ephemeralPubKey)) return;
     const s = sharedOf(bytesOf(grant.viewing), bytesOf(ephemeralPubKey));
     if (s[0] !== viewTag) return;
-    const h = mask(s, bytesOf(grant.spendingPub));
+    const h = mask(s);
     const stealthPub = Point.fromHex(grant.spendingPub.slice(2)).add(Point.BASE.multiply(h));
     return addressOf(stealthPub);
   } catch {

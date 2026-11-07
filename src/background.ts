@@ -14,7 +14,7 @@ import {
 } from "./lib/page";
 import { accountFromSecret, sessionAccount } from "./lib/account";
 import { currentNet, netInfo, setNet, type NetName } from "./lib/chain";
-import { ensName } from "./lib/ens";
+import { ensName, lookup, buildSetMeta, buildSetResolver, nameResolver, ENS } from "./lib/ens";
 import { recentTxs } from "./lib/history";
 import { uniswapCards } from "./lib/market";
 import { quoteEthToUsdc } from "./lib/quote";
@@ -131,6 +131,7 @@ async function handle(
     meta?: string;
     address?: string;
     full?: boolean;
+    quick?: boolean;
     viewing?: string;
     spendingPub?: string;
     raw?: string;
@@ -138,6 +139,7 @@ async function handle(
     windowFrom?: number;
     windowTo?: number;
     hash?: string;
+    name?: string;
   },
   sender: chrome.runtime.MessageSender,
 ) {
@@ -163,6 +165,8 @@ async function handle(
     "deny",
     "balance",
     "ens",
+    "ens-lookup",
+    "ens-publish",
     "market",
     "quote",
     "send",
@@ -332,6 +336,49 @@ async function handle(
     const account = await sessionAccount();
     if (!account) throw new Error("Locked.");
     return { name: (await ensName(account.address)) ?? "" };
+  }
+
+  // Resolve an ENS name to the meta-address it publishes, so a payer can type
+  // "alice.eth" instead of pasting 141 characters.
+  if (msg.type === "ens-lookup") {
+    // The send path only needs the record, so it asks for one call fewer.
+    const info = await lookup(msg.name ?? "", Boolean(msg.quick));
+    return { ...info, note: mixnetNote() };
+  }
+
+  // The ENSv2 registry that owns .eth, read from the root at call time.
+  if (msg.type === "ens-registry") {
+    return { registry: await ENS.ethRegistry, resolver: ENS.resolverV2, note: mixnetNote() };
+  }
+
+  // Point a name at a resolver. Usually unnecessary: the ENS app already deploys
+  // a per-account resolver proxy at registration. Exposed so a name that points
+  // nowhere can be fixed.
+  if (msg.type === "ens-set-resolver") {
+    const secret = await sessionMnemonic();
+    if (!secret) throw new Error("Locked.");
+    const name = msg.name ?? "";
+    const label = name.trim().toLowerCase().split(".")[0];
+    const target = msg.address?.trim() || (await nameResolver(label));
+    if (!target || target === "0x0000000000000000000000000000000000000000") {
+      throw new Error("That name has no resolver to keep. Pass one explicitly.");
+    }
+    const call = buildSetResolver(name, target);
+    const net = await currentNet();
+    const hash = await sendCall(secret, call, net);
+    return { hash, resolver: target, net: netInfo(net).name, note: mixnetNote() };
+  }
+
+  // Publish this wallet's meta-address to a name the user controls. One text
+  // record, on whatever resolver that name already uses.
+  if (msg.type === "ens-publish") {
+    const secret = await sessionMnemonic();
+    if (!secret) throw new Error("Locked.");
+    const meta = metaAddress(keysFromSecret(secret));
+    const call = await buildSetMeta(msg.name ?? "", meta);
+    const net = await currentNet();
+    const hash = await sendCall(secret, call, net);
+    return { hash, name: (msg.name ?? "").trim().toLowerCase(), meta, net: netInfo(net).name, note: mixnetNote() };
   }
 
   if (msg.type === "market") {

@@ -231,8 +231,22 @@ async function paintActivity() {
 }
 
 async function paintMeta() {
-  const res = await ask({ type: "receive" });
-  $("meta").textContent = res.meta;
+  const el = $("meta");
+  el.textContent = "…";
+  try {
+    const res = await ask({ type: "receive" }, 20_000);
+    if (!res?.meta) throw new Error("The wallet returned no meta-address.");
+    el.textContent = res.meta;
+  } catch (err) {
+    // Never leave this blank. A silent failure looked like a missing feature.
+    el.textContent = "";
+    const msg = $("meta-err");
+    msg.hidden = false;
+    msg.textContent =
+      err instanceof Error
+        ? `Could not read the meta-address: ${err.message}`
+        : "Could not read the meta-address.";
+  }
 }
 
 /* --------------------------------------------------------------- receipts */
@@ -465,9 +479,11 @@ $("pay").addEventListener("click", async () => {
   $("note").textContent = "paying…";
   $("pay-result").hidden = true;
   try {
+    // A name is resolved first, so the send box accepts either form.
+    const meta = await resolvePayee();
     const res = await ask({
       type: "pay",
-      meta: ($("pay-meta") as HTMLInputElement).value,
+      meta,
       amount: ($("pay-amt") as HTMLInputElement).value,
     });
     $("note").textContent = `paid to ${short(res.stealthAddress)}`;
@@ -822,18 +838,88 @@ $("guard-demo").addEventListener("click", () => {
   }
 });
 
-$("register").addEventListener("click", async () => {
-  const note = $("reg-note");
+/* -------------------------------------------------------------- ens names */
+
+// Resolves a name to the meta-address it publishes, so the send box accepts
+// "alice.eth" as well as a 141-character string.
+async function resolvePayee(): Promise<string> {
+  const raw = ($("pay-meta") as HTMLInputElement).value.trim();
+  if (!raw) throw new Error("Enter a meta-address or a name.");
+  if (raw.toLowerCase().startsWith("st:eth:")) return raw;
+  if (!/\.eth$/i.test(raw)) throw new Error("That is neither a meta-address nor an ENS name.");
+  const info = await ask({ type: "ens-lookup", name: raw, quick: true }, 35_000);
+
+  if (info.meta) return info.meta as string;
+
+  // Say what actually happened. A failed read is not the same as an empty record,
+  // and the old message conflated the two.
+  if (info.readError) {
+    throw new Error(`${info.name} is registered, but the record could not be read: ${info.readError}`);
+  }
+  const state = String(info.status ?? "unknown");
+  if (state === "available") {
+    throw new Error(`${info.name} is not registered.`);
+  }
+  throw new Error(
+    `${info.name} resolves (${state}) but the stealth-meta-address[1] record is empty. ` +
+      `The owner has to publish it.`,
+  );
+}
+
+$("pay-resolve").addEventListener("click", async () => {
+  const note = $("pay-resolved");
   note.hidden = false;
-  note.textContent = "publishing to the ERC-6538 registry…";
+  note.textContent = "resolving through the mixnet…";
   try {
-    const res = await ask({ type: "register" });
-    note.replaceChildren(receiptNode({ label: "Meta-address registered.", hash: res.hash, net: res.net }));
+    const meta = await resolvePayee();
+    note.textContent = meta;
   } catch (err) {
-    note.textContent = err instanceof Error ? err.message : "Registration failed.";
+    note.textContent = err instanceof Error ? err.message : "Could not resolve it.";
   }
 });
 
+$("ens-read").addEventListener("click", async () => {
+  const note = $("ens-note");
+  const list = $("ens-out");
+  note.hidden = false;
+  note.textContent = "reading through the mixnet…";
+  list.replaceChildren();
+  try {
+    const info = await ask({ type: "ens-lookup", name: ($("ens-name") as HTMLInputElement).value.trim() }, 35_000);
+    note.textContent = info.meta
+      ? `${info.name} publishes a meta-address.`
+      : `${info.name} has no stealth record.`;
+
+    // Show the v2 state, so the hierarchy is visible rather than asserted.
+    const rows: [string, string][] = [
+      ["registry", "ETHRegistry (ENSv2)"],
+      ["status", String(info.status)],
+      ["expiry", String(info.expiry ?? "none")],
+      ["resolver", short(String(info.resolver))],
+      ["node", String(info.node).slice(0, 18) + "…"],
+      ["meta-address", info.meta ? String(info.meta).slice(0, 34) + "…" : "not set"],
+    ];
+    for (const [k, v] of rows) {
+      const li = document.createElement("li");
+      li.className = "tx";
+      const body = document.createElement("div");
+      const key = document.createElement("p");
+      key.className = "k";
+      key.textContent = k;
+      const val = document.createElement("code");
+      val.className = "receipt-hash";
+      val.textContent = v;
+      body.append(key, val);
+      li.append(body);
+      list.append(li);
+    }
+  } catch (err) {
+    note.textContent = err instanceof Error ? err.message : "Could not read it.";
+  }
+});
+
+// Under ENSv2 the ENS app deploys a per-account resolver at registration, so this
+// is only needed when a name points nowhere. It reports the resolver it keeps.
 /* ------------------------------------------------------------------ tabs */
 
 function pickTab(name: string) {

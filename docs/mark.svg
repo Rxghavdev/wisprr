@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <style>
+    path { stroke-dasharray: 16; stroke-dashoffset: 16; animation: draw 0.7s steps(8) forwards; }
+    path:nth-of-type(2) { animation-delay: 0.12s; }
+    path:nth-of-type(3) { animation-delay: 0.24s; }
+    @keyframes draw { to { stroke-dashoffset: 0; } }
+  </style>
+  <rect x="1.25" y="1.25" width="29.5" height="29.5" rx="8" stroke="#f4f4f4" stroke-width="1.5"/>
+  <path d="M9 11.5h12" stroke="#f4f4f4" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M9 16h8" stroke="#f4f4f4" stroke-width="2.2" stroke-linecap="round" opacity=".62"/>
+  <path d="M9 20.5h5" stroke="#f4f4f4" stroke-width="2.2" stroke-linecap="round" opacity=".32"/>
+</svg>

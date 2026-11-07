@@ -197,6 +197,28 @@ h2 {
   font-weight: 400;
 }
 
+/* A section heading: one or two words, no sentence. The panel used to explain
+   itself in paragraphs; labels do the same job without the noise. */
+.label {
+  margin: 0 0 8px;
+  color: var(--dim);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+/* One line under the wordmark. Says what the wallet is for, in the space a
+   stranger will actually read. */
+.tagline {
+  margin: 6px 0 0;
+  max-width: 30ch;
+  color: var(--dim);
+  font-size: 11px;
+  line-height: 1.45;
+  font-weight: 400;
+}
+
 .rule {
   height: 0;
   margin: 22px 0;
@@ -214,9 +236,18 @@ h2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
+  align-items: start;
 }
 
+/* Inside a row, controls are side by side, so their own top margins would double
+   the gap the grid already provides. */
+.actions > * { margin-top: 0; }
+.actions > input { margin-top: 0; }
+.actions + button { margin-top: 8px; }
+
 /* --- meta / code -------------------------------------------------------- */
+
+.field-row { margin: 0 0 12px; }
 
 .meta {
   display: block;

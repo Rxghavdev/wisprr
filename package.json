@@ -7,10 +7,11 @@
   "scripts": {
     "build": "node build.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "esbuild test/run.ts --bundle --platform=node --format=esm --outfile=test/run.mjs --log-level=error && node test/run.mjs"
+    "test": "esbuild test/run.ts --bundle --platform=node --format=esm --outfile=test/run.mjs --log-level=error --external:tiny-secp256k1 && node test/run.mjs"
   },
   "dependencies": {
     "@anon-rpc/browser-extension-harness": "0.4.0",
+    "@scopelift/stealth-address-sdk": "^1.0.0-beta.5",
     "@web3auth/modal": "11.4.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

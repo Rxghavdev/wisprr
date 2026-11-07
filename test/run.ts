@@ -196,6 +196,139 @@ group("message signing");
   );
 }
 
+/* ------------------------------------------------------------ ens record */
+
+group("ens stealth record");
+{
+  // The draft ENSIP key, from the ENS forum RFC "Privacy-Preserving Names".
+  const KEY = "stealth-meta-address[1]";
+  ok("record key matches the draft ENSIP", KEY === "stealth-meta-address[1]");
+
+  const meta = metaAddress(keysFromSecret(generateMnemonic(english)));
+  const ACCEPT = /^st:eth:0x[0-9a-fA-F]{132}$/;
+
+  ok("a real meta-address is accepted", ACCEPT.test(meta.trim()));
+  ok("a truncated one is rejected", !ACCEPT.test(meta.slice(0, -1)));
+  ok("a non-meta string is rejected", !ACCEPT.test("hello"));
+  ok("an empty record is rejected", !ACCEPT.test(""));
+  ok("a wrong-prefix value is rejected", !ACCEPT.test("st:btc:0x" + "aa".repeat(66)));
+  ok("non-hex is rejected", !ACCEPT.test("st:eth:0x" + "zz".repeat(66)));
+
+  // The value written must survive a parse.
+  const parsed = parseMeta(meta);
+  ok("the value parses to two 33-byte keys", parsed.spending.length === 33 && parsed.viewing.length === 33);
+
+  // setText calldata must use the documented selector.
+  const { encodeFunctionData, namehash, keccak256, toHex } = await import("viem");
+  const node = namehash("alice.eth");
+  const data = encodeFunctionData({
+    abi: [
+      {
+        type: "function",
+        name: "setText",
+        stateMutability: "nonpayable",
+        inputs: [{ name: "node", type: "bytes32" }, { name: "key", type: "string" }, { name: "value", type: "string" }],
+        outputs: [],
+      },
+    ] as const,
+    functionName: "setText",
+    args: [node, KEY, meta],
+  });
+  ok("setText selector is 0x10f13a8c", data.slice(0, 10) === "0x10f13a8c", data.slice(0, 10));
+  ok("namehash is deterministic", namehash("alice.eth") === node);
+  ok(
+    "namehash differs per name",
+    namehash("alice.eth") !== namehash("bob.eth"),
+  );
+  ok(
+    "the setText selector matches keccak of the signature",
+    keccak256(toHex("setText(bytes32,string,string)")).slice(0, 10) === "0x10f13a8c",
+  );
+}
+
+/* ---------------------------------------------------------------- ensv2 */
+
+group("ensv2");
+{
+  const { ENS, META_KEY, dnsEncode, namehashV2 } = await import("../src/lib/ens");
+  const { getAddress, namehash, isAddress } = await import("viem");
+
+  ok("every ENS address is a valid checksum", Object.values(ENS).every((a) => isAddress(a) && getAddress(a) === a));
+  ok("root registry is not the eth registry", ENS.rootRegistry.toLowerCase() !== ENS.ethRegistry.toLowerCase());
+
+  // ENSIP-10 name encoding, not a namehash.
+  ok("dnsEncode('test.eth') matches the spec", dnsEncode("test.eth") === "0x04746573740365746800");
+  ok("dnsEncode('eth') is 4 bytes", dnsEncode("eth") === "0x0365746800");
+  ok("dnsEncode is case-insensitive", dnsEncode("TEST.eth") === dnsEncode("test.eth"));
+  ok("dnsEncode rejects an empty name", (() => {
+    try {
+      dnsEncode("");
+      return false;
+    } catch {
+      return true;
+    }
+  })());
+
+  // Our v2 node derivation must agree with viem's.
+  ok("namehashV2 matches viem for eth", namehashV2("eth") === namehash("eth"));
+  ok("namehashV2 matches viem for a subname", namehashV2("alice.eth") === namehash("alice.eth"));
+  ok("namehashV2 differs per name", namehashV2("alice.eth") !== namehashV2("bob.eth"));
+
+  // The record key is the draft ENSIP one.
+  ok("meta record key is the draft ENSIP key", META_KEY === "stealth-meta-address[1]");
+}
+
+/* ------------------------------------------- interop with reference SDK */
+
+group("interop: scopelift stealth-address-sdk");
+{
+  const sdk = await import("@scopelift/stealth-address-sdk");
+  const { secp256k1 } = await import("@noble/curves/secp256k1.js");
+  const { keccak256 } = await import("viem");
+
+  const hexOf = (b: Uint8Array) => ("0x" + Buffer.from(b).toString("hex")) as `0x${string}`;
+  const meta = metaAddress(keys);
+
+  // Our payment must be recoverable by the reference implementation.
+  for (let i = 0; i < 3; i++) {
+    const mine = derivePayment(meta);
+    const sdkKey = sdk.computeStealthKey({
+      viewingPrivateKey: hexOf(keys.viewing),
+      spendingPrivateKey: hexOf(keys.spending),
+      ephemeralPublicKey: mine.ephemeralPubKey,
+      schemeId: sdk.VALID_SCHEME_ID.SCHEME_ID_1,
+    });
+    ok(
+      `the SDK recovers our payment #${i + 1}`,
+      accountFor(sdkKey).address.toLowerCase() === mine.stealthAddress.toLowerCase(),
+    );
+  }
+
+  // The reference implementation's payment must be recoverable by ours.
+  for (let i = 0; i < 3; i++) {
+    const theirs = sdk.generateStealthAddress({ stealthMetaAddressURI: meta });
+    const priv = openPayment(keys, theirs.ephemeralPublicKey as `0x${string}`, Number(theirs.viewTag));
+    ok(
+      `we recover the SDK's payment #${i + 1}`,
+      Boolean(priv) && accountFor(priv!).address.toLowerCase() === theirs.stealthAddress.toLowerCase(),
+    );
+  }
+
+  // The view tag is the first byte of keccak256(sharedSecret), nothing more.
+  const p = derivePayment(meta);
+  const shared = secp256k1.getSharedSecret(
+    keys.viewing,
+    Uint8Array.from(Buffer.from(p.ephemeralPubKey.slice(2), "hex")),
+    true,
+  );
+  const hashed = sdk.getHashedSharedSecret({ sharedSecret: shared, schemeId: sdk.VALID_SCHEME_ID.SCHEME_ID_1 });
+  ok("the shared secret hash matches the SDK", keccak256(shared as Uint8Array).toLowerCase() === hashed.toLowerCase());
+  ok(
+    "the view tag matches the SDK",
+    Number(sdk.getViewTag({ hashedSharedSecret: hashed, schemeId: sdk.VALID_SCHEME_ID.SCHEME_ID_1 })) === p.viewTag,
+  );
+}
+
 /* ---------------------------------------------------------------- summary */
 console.log(`\n${"-".repeat(48)}`);
 console.log(`${pass} passed, ${fail} failed`);

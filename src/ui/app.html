@@ -17,6 +17,7 @@
           <div class="grow">
             <p class="where">Ethereum</p>
             <h1>wisprr</h1>
+            <p class="tagline">be paid by name. arrive somewhere new every time.</p>
           </div>
           <span class="badge" id="lock-badge" hidden>locked</span>
         </div>
@@ -92,92 +93,96 @@
           </nav>
 
           <div class="tab-body show" data-body="receive">
-            <p class="lede">Hand this out instead of your address. Every payment lands somewhere new, and nobody can link two of them to you.</p>
+            <p class="label">Your meta-address</p>
             <div class="field-row">
               <code class="meta" id="meta"></code>
+              <p class="quiet" id="meta-err" hidden></p>
             </div>
-            <div class="actions">
-              <button id="copy-meta" class="ghost" type="button">Copy meta-address</button>
-              <button id="register" class="ghost" type="button">Publish to registry</button>
-            </div>
-            <p class="quiet" id="reg-note" hidden></p>
+            <button id="copy-meta" class="ghost" type="button">Copy</button>
 
             <hr class="rule" />
 
-            <p class="lede">Payments that arrived for you.</p>
+            <p class="label">ENS name</p>
+            <input id="ens-name" spellcheck="false" placeholder="wisprr.eth" />
+            <button id="ens-read" class="ghost" type="button">Check</button>
+            <p class="quiet" id="ens-note" hidden></p>
+            <ul class="txs" id="ens-out"></ul>
+
+            <hr class="rule" />
+
             <div class="actions">
-              <button id="scan" class="ghost" type="button">Scan for payments</button>
-              <button id="scan-deep" class="ghost" type="button">Scan further back</button>
+              <button id="scan" class="ghost" type="button">Scan payments</button>
+              <button id="scan-deep" class="ghost" type="button">Scan deeper</button>
             </div>
             <p class="quiet" id="scan-note" hidden></p>
             <ul class="txs" id="found"></ul>
 
             <hr class="rule" />
 
-            <p class="lede">Moving a payment out. Sweeping to your own vault is refused, because the chain would record that the stealth address is yours.</p>
-            <div class="box-note">
-              <p class="quiet">The guard checks five heuristics from the published deanonymisation work: destination reuse, round trips, collector sweeps, gas funding and timing. Two of those block outright.</p>
-              <button id="guard-demo" class="ghost" type="button">Explain the guard</button>
-              <ul class="txs" id="guard-out"></ul>
-            </div>
+            <button id="guard-demo" class="text" type="button">why sweeps get refused</button>
+            <ul class="txs" id="guard-out"></ul>
           </div>
 
           <div class="tab-body" data-body="send" hidden>
-            <p class="lede">Paste someone's meta-address. The money goes to a one-time address and is announced, so only they can find it.</p>
-            <label>Meta-address <input id="pay-meta" spellcheck="false" placeholder="st:eth:0x…" /></label>
-            <label>ETH <input id="pay-amt" inputmode="decimal" value="0.001" /></label>
+            <p class="label">Pay</p>
+            <input id="pay-meta" spellcheck="false" placeholder="st:eth:0x… or wisprr.eth" />
+            <div class="actions">
+              <button id="pay-resolve" class="ghost" type="button">Resolve</button>
+              <input id="pay-amt" inputmode="decimal" value="0.001" />
+            </div>
+            <p class="quiet" id="pay-resolved" hidden></p>
             <button id="pay" type="button">Send privately</button>
             <div id="pay-result" hidden></div>
 
             <hr class="rule" />
 
-            <p class="lede">Moving USDC out of a stealth address without giving it any gas. The stealth key signs offline and this wallet submits it.</p>
-            <label>Stealth address <input id="tk-addr" spellcheck="false" placeholder="0x…" /></label>
-            <label>Send USDC to <input id="tk-to" spellcheck="false" placeholder="0x…" /></label>
+            <p class="label">USDC sweep</p>
+            <input id="tk-addr" spellcheck="false" placeholder="stealth address" />
+            <input id="tk-to" spellcheck="false" placeholder="send to" />
             <div class="actions">
-              <button id="tk-check" class="ghost" type="button">Check USDC balance</button>
-              <button id="tk-sweep" class="ghost" type="button">Sweep USDC</button>
+              <button id="tk-check" class="ghost" type="button">Balance</button>
+              <button id="tk-sweep" class="ghost" type="button">Sweep</button>
             </div>
             <p class="quiet" id="tk-note" hidden></p>
           </div>
 
           <div class="tab-body" data-body="audit" hidden>
-            <p class="lede">Give an auditor a key for a named purpose and a date range. They see payments inside it, nothing outside, and they cannot move a thing.</p>
-            <label>Grantee <input id="g-who" placeholder="Deloitte AG" /></label>
-            <label>Purpose <input id="g-why" placeholder="Q3 2026 flows" /></label>
+            <p class="label">Issue a grant</p>
+            <input id="g-who" placeholder="grantee" />
+            <input id="g-why" placeholder="purpose" />
             <div class="split">
-              <label>From <input id="g-from" type="date" /></label>
-              <label>To <input id="g-to" type="date" /></label>
+              <input id="g-from" type="date" />
+              <input id="g-to" type="date" />
             </div>
-            <button id="g-make" type="button">Issue grant</button>
+            <button id="g-make" type="button">Issue</button>
             <code class="meta" id="g-out" hidden></code>
             <ul class="txs" id="g-list"></ul>
 
             <hr class="rule" />
 
             <details>
-              <summary>Auditor view</summary>
+              <summary>auditor view</summary>
               <div class="details-body">
-                <label>Grant hash <input id="a-hash" spellcheck="false" placeholder="0x…" /></label>
-                <label>Viewing key <input id="a-view" spellcheck="false" placeholder="0x…" /></label>
-                <label>Spending public key <input id="a-spend" spellcheck="false" placeholder="0x…" /></label>
+                <input id="a-view" spellcheck="false" placeholder="viewing key" />
+                <input id="a-spend" spellcheck="false" placeholder="spending public key" />
+                <input id="a-hash" spellcheck="false" placeholder="grant hash" />
                 <div class="split">
-                  <label>From <input id="a-from" type="date" /></label>
-                  <label>To <input id="a-to" type="date" /></label>
+                  <input id="a-from" type="date" />
+                  <input id="a-to" type="date" />
                 </div>
-                <button id="a-scan" class="ghost" type="button">Scan inside this mandate</button>
+                <button id="a-scan" class="ghost" type="button">Scan inside mandate</button>
                 <ul class="txs" id="a-found"></ul>
               </div>
             </details>
           </div>
 
           <div class="tab-body" data-body="activity" hidden>
-            <p class="lede">Recent transfers on this wallet, read through the mixnet.</p>
+            <p class="label">Transfers</p>
             <ul class="txs" id="txs"></ul>
 
             <hr class="rule" />
 
-            <p class="lede">Sites that can see your address.</p>
+            <p class="label">Connected sites</p>
             <ul class="sites" id="sites"></ul>
           </div>
 
